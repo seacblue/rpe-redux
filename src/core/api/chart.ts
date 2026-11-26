@@ -1,5 +1,12 @@
 /** Owns the frozen plugin facade for detached chart reads and stable object lookup. */
 import { getChartApi, readAllChartItems, type ChartApi } from "../edit/chart/api.ts";
+import {
+  addBeatFraction,
+  addBeats,
+  isBeat,
+  subtractBeats,
+  type Beat,
+} from "../global/chart/timing/beat.ts";
 import { apiCall, availabilityFor, unavailableResult } from "./support.ts";
 import type { ApiAvailability, ApiResult } from "./contract.ts";
 import type {
@@ -31,8 +38,41 @@ function withChart<T>(run: (api: ChartApi) => T): ApiResult<T> {
   return api ? apiCall(() => run(api)) : unavailableResult<T>("No editor chart runtime connected");
 }
 
+/** Reject malformed public beat inputs before exact arithmetic runs. */
+function requireBeat(value: readonly number[], path: string): void {
+  if (!isBeat(value)) {
+    throw new Error(`${path} must be a valid beat triple`);
+  }
+}
+
 /** Detached chart reads exposed to plugins. */
 export const chart = Object.freeze({
+  /** Exact arithmetic helpers for reduced chart beat triples. */
+  beats: Object.freeze({
+    /** Add two beat triples without converting through floating point. */
+    add(left: readonly number[], right: readonly number[]): ApiResult<Beat> {
+      return apiCall(() => {
+        requireBeat(left, "left");
+        requireBeat(right, "right");
+        return addBeats(left, right);
+      });
+    },
+    /** Add an exact fraction to a beat triple without converting through floating point. */
+    addFraction(beat: readonly number[], numerator: number, denominator: number): ApiResult<Beat> {
+      return apiCall(() => {
+        requireBeat(beat, "beat");
+        return addBeatFraction(beat, numerator, denominator);
+      });
+    },
+    /** Subtract one beat triple from another without converting through floating point. */
+    subtract(left: readonly number[], right: readonly number[]): ApiResult<Beat> {
+      return apiCall(() => {
+        requireBeat(left, "left");
+        requireBeat(right, "right");
+        return subtractBeats(left, right);
+      });
+    },
+  }),
   /** Report whether a chart runtime is connected. */
   availability(): ApiAvailability {
     return availabilityFor(getChartApi(), "No editor chart runtime connected");
@@ -167,6 +207,8 @@ export const chart = Object.freeze({
 });
 
 export type ChartHandle = typeof chart;
+
+export type { Beat };
 
 export type {
   ChartEventReadRef,

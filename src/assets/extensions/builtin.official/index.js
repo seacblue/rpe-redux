@@ -86,7 +86,12 @@ function registerTransform(context, definition) {
         ui.notice({ key: "notice.noSelection" }, { level: "warning" });
         return;
       }
-      const patches = definition.patch(selected.notes, selected.lines || [], selected.events);
+      const patches = await definition.patch(
+        selected.notes,
+        selected.lines || [],
+        selected.events,
+        api,
+      );
       const normalizedPatches = Array.isArray(patches)
         ? patches.filter(Boolean)
         : {
@@ -183,15 +188,17 @@ export default {
       },
       {
         id: "ToHold",
-        patch: (notes, lines) => {
-          const length = 1 / Math.max(1, lines.length);
-          return notes.map(({ id, note }) => ({
-            id,
-            patch: {
-              type: NOTE_TYPES.Hold,
-              endTime: Number(note.startTime) + length,
-            },
-          }));
+        patch: async (notes, lines, _events, api) => {
+          const denominator = Math.max(1, lines.length);
+          return Promise.all(
+            notes.map(async ({ id, note }) => {
+              const endTime = await api.chart.beats.addFraction(note.startTime, 1, denominator);
+              if (!endTime.ok) {
+                throw new Error(endTime.error.message);
+              }
+              return { id, patch: { type: NOTE_TYPES.Hold, endTime: endTime.value } };
+            }),
+          );
         },
       },
     ];
