@@ -21,6 +21,7 @@ import {
   type ListSelectionModifiers,
 } from "../../../../../design/patterns/list/listSelection.ts";
 import { lineTreeKey } from "./lineTreeModel.ts";
+import { resolveLineTreeMarqueeFocus, topmostLineInSelection } from "./lineTreeSelection.ts";
 
 const MARQUEE_THRESHOLD = 4;
 
@@ -42,6 +43,7 @@ interface MarqueeGesture {
   initial: Set<string>;
   hits: Set<string>;
   firstLine: string | null;
+  focusLine: string | null;
   modifiers: ListSelectionModifiers;
   moved: boolean;
 }
@@ -56,6 +58,7 @@ interface MarqueeOptions {
   currentScroll(): number;
   onSelectionChange(ids: ReadonlySet<string>): void;
   onSelectionFirstLineChange?(index: number): void;
+  onSelectionFocusChange?(index: number): void;
   onSelectLine(index: number, scrollTop: number): void;
   onClick(index: number, modifiers: ListSelectionModifiers): void;
 }
@@ -71,6 +74,7 @@ export function useLineTreeMarquee({
   currentScroll,
   onSelectionChange,
   onSelectionFirstLineChange,
+  onSelectionFocusChange,
   onSelectLine,
   onClick,
 }: MarqueeOptions) {
@@ -87,6 +91,7 @@ export function useLineTreeMarquee({
     currentScroll,
     onSelectionChange,
     onSelectionFirstLineChange,
+    onSelectionFocusChange,
     onSelectLine,
     onClick,
   });
@@ -101,6 +106,7 @@ export function useLineTreeMarquee({
       currentScroll,
       onSelectionChange,
       onSelectionFirstLineChange,
+      onSelectionFocusChange,
       onSelectLine,
       onClick,
     };
@@ -114,6 +120,7 @@ export function useLineTreeMarquee({
     currentScroll,
     onSelectionChange,
     onSelectionFirstLineChange,
+    onSelectionFocusChange,
     onSelectLine,
     onClick,
   ]);
@@ -155,7 +162,8 @@ export function useLineTreeMarquee({
       startKey,
       initial: new Set(currentOptions.selectedIds),
       hits: new Set(currentOptions.selectedIds),
-      firstLine: null,
+      firstLine: startKey,
+      focusLine: startKey,
       modifiers,
       moved: false,
     };
@@ -206,7 +214,8 @@ export function useLineTreeMarquee({
           touched.push(lineTreeKey(currentOptions.lines, index));
         }
       }
-      current.firstLine = touched[0] ?? current.firstLine;
+      current.firstLine =
+        topmostLineInSelection(currentOptions.order, touched) ?? current.firstLine;
       const preview = listSelectionAfterMarquee(
         currentOptions.order,
         current.initial,
@@ -215,6 +224,13 @@ export function useLineTreeMarquee({
         true,
       );
       current.hits = new Set(preview.selection);
+      current.focusLine =
+        resolveLineTreeMarqueeFocus(
+          currentOptions.order,
+          current.initial,
+          touched,
+          current.modifiers,
+        ) ?? preview.focus;
       setMarquee({ left, top, width: right - left, height: bottom - top, hits: current.hits });
     };
 
@@ -248,20 +264,27 @@ export function useLineTreeMarquee({
       const changed =
         current.hits.size !== current.initial.size ||
         [...current.hits].some((id) => !current.initial.has(id));
-      if (!changed) {
+      if (!changed && !current.modifiers.shiftKey) {
         return;
       }
-      const focusId = [...current.hits][0];
+      if (current.modifiers.shiftKey && !current.firstLine) {
+        return;
+      }
+      const focusId = current.focusLine ?? [...current.hits][0];
       const focusIndex = focusId === undefined ? undefined : latest.lineIndices.get(focusId);
       if (focusIndex === undefined) {
         return;
       }
-      latest.onSelectionChange(new Set(current.hits));
-      if (!current.modifiers.shiftKey) {
-        const firstLineIndex = current.firstLine
-          ? latest.lineIndices.get(current.firstLine)
-          : focusIndex;
-        latest.onSelectionFirstLineChange?.(firstLineIndex ?? focusIndex);
+      if (changed) {
+        latest.onSelectionChange(new Set(current.hits));
+      }
+      const firstLineIndex = current.firstLine
+        ? latest.lineIndices.get(current.firstLine)
+        : focusIndex;
+      latest.onSelectionFirstLineChange?.(firstLineIndex ?? focusIndex);
+      if (current.modifiers.shiftKey) {
+        latest.onSelectionFocusChange?.(focusIndex);
+        latest.onSelectLine(focusIndex, latest.currentScroll());
       }
     };
 

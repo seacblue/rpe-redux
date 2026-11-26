@@ -100,11 +100,10 @@ export function buildMultiLineLineBarItems(
  * Resolve one click on a line row using the toolbar contract.
  *
  * A plain click replaces the selection with the clicked line. Shift-click
- * replaces it with the range from the current first line to the clicked line
- * while keeping the current focus line unchanged.
- * Ctrl/Cmd-click toggles only the clicked line. The selection never becomes
- * empty, and a removal keeps the current line inside the remaining selection
- * when it can.
+ * replaces it with the range from the fixed first line to the clicked line and
+ * moves focus to the clicked line. Ctrl/Cmd-click toggles only the clicked line.
+ * The selection never becomes empty, and a removal keeps the current line
+ * inside the remaining selection when it can.
  */
 export function lineBarSelectionAfterClick(
   current: number,
@@ -114,7 +113,6 @@ export function lineBarSelectionAfterClick(
   tokens: readonly LineSelectionToken[] = tokensFromLines(selection),
   available: readonly number[] = [...new Set([...selection, clicked])],
   groups: readonly LineSelectionGroup[] = [],
-  /** First selected line is separate from focus so Shift does not move focus. */
   firstLine: number | null | undefined = current,
 ): MultiLineLineBarState {
   const focus = Number.isInteger(current) && current >= 0 ? current : clicked;
@@ -146,11 +144,11 @@ export function lineBarSelectionAfterClick(
   if (modifiers.shiftKey) {
     const nextTokens = tokensFromLines(result.selection);
     return {
-      current: focus,
+      current: clicked,
       selection: result.selection,
       tokens: nextTokens.length ? nextTokens : base,
       firstLine: firstLine ?? rangeStart,
-      focus,
+      focus: clicked,
     };
   }
   if (selected.has(clicked)) {

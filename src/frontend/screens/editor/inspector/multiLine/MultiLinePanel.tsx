@@ -60,6 +60,7 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
+  resolveMarqueeFocusLine,
   type MarqueeBox,
   type MarqueeDrag,
   type MarqueePoint,
@@ -213,7 +214,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     editorLine.set(String(focus));
     renderSession();
   };
-  /** Applies one line-list click while keeping focus and firstLine separate. */
+  /** Applies one line-list click using firstLine as the range origin and focus as the endpoint. */
   const commitLineClick = (index: number, modifiers: ListSelectionModifiers = {}) => {
     const current = Number(editorLine.get());
     const active = Number.isInteger(current) ? current : 0;
@@ -315,15 +316,20 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     const requested = Number.isInteger(preview.focus) ? preview.focus : currentNow;
     const safe = next.length ? next : [requested];
     const safeTokens = next.length ? tokens : tokensFromLines(safe);
-    const firstLine = safe[0] ?? state.firstLine ?? state.focus ?? currentNow;
+    const focused = modifiers.shiftKey
+      ? resolveMarqueeFocusLine(currentNow, preview.lines, currentNow)
+      : (state.focus ?? currentNow);
+    const firstLine = modifiers.shiftKey
+      ? focused
+      : (safe[0] ?? state.firstLine ?? state.focus ?? currentNow);
     selectionStateRef.current = {
       selection: safe,
-      firstLine: modifiers.shiftKey ? (state.firstLine ?? firstLine) : firstLine,
-      focus: state.focus ?? currentNow,
+      firstLine,
+      focus: focused,
     };
     selectionRef.current = new Set(safe);
     session.setMultiLineSelection(safe, { tokens: safeTokens });
-    editorLine.set(String(selectionStateRef.current.focus ?? currentNow));
+    editorLine.set(String(focused));
     renderSession();
   };
   const rowsInMarquee = (from: MarqueePoint, to: MarqueePoint): number[] => {

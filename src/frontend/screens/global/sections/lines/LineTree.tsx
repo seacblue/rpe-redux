@@ -241,7 +241,6 @@ export const LineTree = memo(function LineTree({
     return () => window.clearTimeout(timer);
   }, [createPromptOpen]);
   const currentScroll = () => listRef.current?.scrollTop ?? 0;
-  /** Applies the shared Windows-style click rule to one line row. */
   const selectRow = useCallback((index: number, modifiers: ListSelectionModifiers = {}) => {
     const current = selectionRef.current;
     const key = lineTreeKey(current.lines, index);
@@ -253,12 +252,9 @@ export const LineTree = memo(function LineTree({
     const next = new Set(result.selection);
     selectionStateRef.current = result;
     current.onSelectionChange(next);
-    if (!modifiers.shiftKey) {
-      const focusIndex = result.focus ? (current.lineIndices.get(result.focus) ?? index) : index;
-      current.onSelectLine(focusIndex, listRef.current?.scrollTop ?? 0);
-    }
+    const focusIndex = result.focus ? (current.lineIndices.get(result.focus) ?? index) : index;
+    current.onSelectLine(focusIndex, listRef.current?.scrollTop ?? 0);
   }, []);
-  /** Selects a folder instead of its first line; line focus stays unchanged. */
   const selectGroup = (group: number) => {
     onSelectFolder(group);
   };
@@ -292,10 +288,22 @@ export const LineTree = memo(function LineTree({
         };
       }
     },
+    onSelectionFocusChange: (index) => {
+      const current = selectionRef.current;
+      if (index >= 0 && index < current.lines.length) {
+        const focusKey = lineTreeKey(current.lines, current.lineIndex);
+        const state =
+          selectionStateRef.current ??
+          createListSelectionState(current.order, [...current.selected], focusKey);
+        selectionStateRef.current = {
+          ...state,
+          focus: lineTreeKey(current.lines, index),
+        };
+      }
+    },
     onSelectLine,
     onClick: selectRow,
   });
-  /** Appends a batch of lines with the supplied name or the shared Untitled default. */
   const addLines = (group: number, amount: number, name?: string) => {
     const count = Math.max(1, Math.min(MAX_BATCH_LINES, Math.trunc(amount)));
     const start = lines.length;
@@ -327,7 +335,6 @@ export const LineTree = memo(function LineTree({
       start + count - 1,
     );
   };
-  /** Inserts groups after the active folder. */
   const addGroups = (amount: number, name?: string) => {
     const count = Math.max(1, Math.min(MAX_BATCH_LINES, Math.trunc(amount)));
     const safeName =

@@ -75,13 +75,13 @@ test("Ctrl-click toggles one line while Shift-click replaces the visible range",
       lineBarSelectionAfterClick(1, [1, 5], 3, { shiftKey: true }, undefined, [0, 1, 2, 3, 4, 5]),
     ),
     {
-      current: 1,
+      current: 3,
       selection: [1, 2, 3],
     },
   );
 });
 
-test("Shift-click uses firstLine without moving the current focus", () => {
+test("Shift-click uses firstLine as the range origin and moves focus to the click", () => {
   assert.deepEqual(
     clicked(
       lineBarSelectionAfterClick(
@@ -96,7 +96,7 @@ test("Shift-click uses firstLine without moving the current focus", () => {
       ),
     ),
     {
-      current: 6,
+      current: 8,
       selection: [1, 2, 3, 4, 5, 6, 7, 8],
     },
   );
