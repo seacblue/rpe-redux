@@ -355,6 +355,15 @@ const dispose = context.ui.registerDesignPanel({
 
 `api.chart.range()` 返回谱面已写入内容的边界：`startBeat`、`endBeat`、`startSeconds` 和 `endSeconds`。它统计音符、普通事件轨和 Shader 事件，不等于引用音频文件的时长；需要在末尾放置对象时，应在 `endBeat` 上明确增加拍数余量。
 
+`api.chart.beats` 提供约分拍三元组的精确加减法，不会先转换成浮点数。`add` 和 `subtract` 组合两个拍三元组，`addFraction` 向一个拍三元组增加分子/分母表示的分数。每个方法返回 `ApiResult`，并随 `chart.read` capability 提供。
+
+```js
+const end = await api.chart.beats.addFraction([2, 0, 1], 1, 2);
+if (end.ok) {
+  console.log(end.value); // [2, 1, 2]
+}
+```
+
 `api.chart.lineGroups()` 只返回扁平的判定线 folder：`{ index, name, lineIndices }`，不会物化完整谱面快照。脚本应该优先用返回的 folder 名传给 `lineGroups.assign`，这样 folder 索引变化后仍然容易读懂、也更不容易切错。
 
 ```js

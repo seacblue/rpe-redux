@@ -421,6 +421,15 @@ Chart writes are one atomic `transaction` request and require `chart.write`. Rea
 
 `api.chart.range()` returns the authored content boundary as `startBeat`, `endBeat`, `startSeconds`, and `endSeconds`. It covers notes, ordinary event tracks, and Shader events; it is not the duration of the referenced audio file.
 
+`api.chart.beats` provides exact arithmetic for reduced beat triples without converting through floating point. `add` and `subtract` combine two triples; `addFraction` adds a numerator/denominator fraction. Each helper returns an `ApiResult` and is available with `chart.read`.
+
+```js
+const end = await api.chart.beats.addFraction([2, 0, 1], 1, 2);
+if (end.ok) {
+  console.log(end.value); // [2, 1, 2]
+}
+```
+
 `api.chart.lineGroups()` returns the flat judge-line folders as `{ index, name, lineIndices }` without materializing the complete chart snapshot. Use the returned name with `lineGroups.assign` when a script should keep working after folder indices change.
 
 ```js

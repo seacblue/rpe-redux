@@ -31,6 +31,8 @@ import type { TrustedExtensionContext, TrustedExtensionDefinition } from "@rpe-r
 
 Chart writes are one atomic `context.api.transaction` request. Read with `context.api.chart` or `context.api.selection`, then call `transaction.preview` or `transaction.apply`. The current contract has no `chart.placeNote` and no direct mutation of chart snapshots. The task guide with a complete note-insert plugin, selected-note updates, events, and result handling is [`docs-sdk/en/place-note.md`](../docs-sdk/en/place-note.md) (Chinese: [`docs-sdk/zh/place-note.md`](../docs-sdk/zh/place-note.md)).
 
+`context.api.chart.beats` provides exact beat arithmetic for Extensions. Use `add` and `subtract` for two reduced triples, or `addFraction` for a numerator/denominator increment. The asynchronous methods return `ApiResult<Beat>` and require `chart.read`; they preserve exact triples instead of passing through floating-point `Number` values.
+
 ## Themes and note skins
 
 Themes and note skins are data packages, not Extension code. Use the reference guides in [`src/assets/themes/README.md`](../src/assets/themes/README.md) and [`src/assets/skins/README.md`](../src/assets/skins/README.md) when packaging visual assets:

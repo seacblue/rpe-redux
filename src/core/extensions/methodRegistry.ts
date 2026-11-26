@@ -141,6 +141,9 @@ const HANDLE_METHODS = {
     ["note", "chart.read", "read", false],
     ["events", "chart.read", "read", false],
     ["event", "chart.read", "read", false],
+    ["beats.add", "chart.read", "read", false],
+    ["beats.addFraction", "chart.read", "read", false],
+    ["beats.subtract", "chart.read", "read", false],
   ],
   transaction: [
     ["availability", "chart.write", "read", false],

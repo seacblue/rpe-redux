@@ -12,6 +12,7 @@ export type { ActionResult, ActionReason, ActionStatus } from "../edit/operation
 export type { SandboxReduxApi as ReduxApi } from "../extensions/sandbox.ts";
 export type {
   ChartHandle as ChartApi,
+  Beat,
   ChartEventReadRef,
   ChartObjectId,
   ChartReadCollection,
