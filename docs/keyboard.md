@@ -84,7 +84,7 @@ Ctrl+wheel steps the active line. While multi-line editing is active the selecte
 
 While multi-line editing shows more than one panel, dragging empty timeline space with the primary button pans the panels horizontally instead of starting a sweep. Both sweep gestures are unavailable in that layout, so neither the primary-button sweep-select nor the right-button sweep-deselect starts a sweep, and a `Shift`+drag marquee takes over additive and subtractive selection; a primary click that does not drag clears the selection. Single-panel layouts keep both sweeps.
 
-Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning.
+Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning. Shortcut recordings preserve the physical digit block as `DIGIT0`…`DIGIT9` or `NUMPAD0`…`NUMPAD9`; the legacy written form `1` remains an alias for `DIGIT1`.
 
 The stage drag handles remain; the same transforms are also available from the keyboard:
 
@@ -99,27 +99,30 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 ## View and transport
 
-| Action                         | Default                                       |
-| ------------------------------ | --------------------------------------------- |
-| Preview only / previous layout | `Ctrl+Space`                                  |
-| Note region                    | `Ctrl+Shift+Q`                                |
-| Event region                   | `Ctrl+Shift+W`                                |
-| Preview region                 | `Ctrl+Shift+E`                                |
-| Notes and events together      | `Ctrl+Shift+R`                                |
-| Reset the view                 | `Ctrl+Shift+F`                                |
-| In-game UI                     | `Ctrl+Shift+G`                                |
-| Play / pause                   | `Space`                                       |
-| Hold preview playback, return  | `T`                                           |
-| Hold preview playback, stay    | `U`                                           |
-| Timeline backward / forward    | `Wheel Down` / `Wheel Up`                     |
-| Fast seek backward / forward   | `Alt+Wheel Down` / `Alt+Wheel Up`             |
-| Next / previous judge line     | `Ctrl+Wheel Down` / `Ctrl+Wheel Up`           |
-| Zoom timeline out / in         | `Alt+Shift+Wheel Down` / `Alt+Shift+Wheel Up` |
-| Settings                       | `Ctrl+K`                                      |
+| Action                         | Default                                         |
+| ------------------------------ | ----------------------------------------------- |
+| Preview only / previous layout | `Ctrl+Space`                                    |
+| Note region                    | `Ctrl+Shift+Q`                                  |
+| Event region                   | `Ctrl+Shift+W`                                  |
+| Preview region                 | `Ctrl+Shift+E`                                  |
+| Notes and events together      | `Ctrl+Shift+R`                                  |
+| Reset the view                 | `Ctrl+Shift+F`                                  |
+| In-game UI                     | `Ctrl+Shift+G`                                  |
+| Play / pause                   | `Space`                                         |
+| Hold preview playback, return  | `T`                                             |
+| Hold preview playback, stay    | `U`                                             |
+| Timeline backward / forward    | `Wheel Down` / `Wheel Up`                       |
+| Fast seek backward / forward   | `Alt+Wheel Down` / `Alt+Wheel Up`               |
+| Next / previous judge line     | `Ctrl+Wheel Down` / `Ctrl+Wheel Up`             |
+| Multi-line scroll              | `Ctrl+Shift+Wheel Up` / `Ctrl+Shift+Wheel Down` |
+| Zoom timeline out / in         | `Alt+Shift+Wheel Down` / `Alt+Shift+Wheel Up`   |
+| Settings                       | `Ctrl+K`                                        |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
 Audio volume is controlled from the expandable console at the bottom-right of the sidebar. `Alt+Shift+Wheel` remains reserved for timeline zoom when the pointer is over the timeline. Plain `Shift+Wheel` has no default timeline action, so it remains available for range selection gestures.
+
+In multi-line editing, `Ctrl+Shift+Wheel Up` and `Ctrl+Shift+Wheel Down` scroll the active note or event panels left and right. The offset is clamped to the available panel range, and both directions can be rebound in **Settings → Shortcuts**.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 

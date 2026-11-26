@@ -38,6 +38,21 @@ test("a binding reads and writes held-key chords in one canonical order", () => 
   );
 });
 
+test("numpad keys stay distinct from the matching top-row keys", () => {
+  const topRow = recordShortcut({ key: "1", code: "Digit1" });
+  const numpad = recordShortcut({ key: "1", code: "Numpad1" });
+
+  assert.deepEqual(topRow, { key: "DIGIT1", modifiers: [] });
+  assert.deepEqual(numpad, { key: "NUMPAD1", modifiers: [] });
+  assert.deepEqual(parseShortcut("1").shortcut, { key: "DIGIT1", modifiers: [] });
+  assert.equal(parseShortcut("NUMPAD1").ok, true);
+  assert.equal(displayText(topRow), "1");
+  assert.equal(displayText(numpad), "Num 1");
+  assert.equal(matches({ key: "1", code: "Numpad1" }, numpad), true);
+  assert.equal(matches({ key: "1", code: "Digit1" }, numpad), false);
+  assert.equal(matches({ key: "1", code: "Numpad1" }, { key: "1" }), false);
+});
+
 test("invalid chords are refused at the key model boundary", () => {
   assert.equal(shortcutIssue({ key: "E", keys: ["E"] }), "shortcuts.error.duplicateKey");
   assert.equal(

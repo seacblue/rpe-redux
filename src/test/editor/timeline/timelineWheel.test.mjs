@@ -78,6 +78,58 @@ test("default Alt+Shift wheel bindings zoom the timeline", () => {
   }
 });
 
+test("default Ctrl+Shift wheel bindings scroll multi-line panels horizontally", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: -1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: 1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true }), {
+      kind: "line",
+      direction: -1,
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("matched multi-line wheel delegates to the horizontal scroll handler", () => {
+  const dispose = registerEditorShortcuts();
+  const calls = [];
+  const event = {
+    deltaY: -100,
+    ctrlKey: true,
+    shiftKey: true,
+    preventDefault() {},
+    stopPropagation() {},
+  };
+  try {
+    const navigation = bindTimelineNavigation({
+      timeline: {
+        gestures: {},
+        viewport: { division: 4, minimumScrollSeconds: () => 0 },
+      },
+      session: () => ({ chart: { META: {} } }),
+      seekByBeats: () => {},
+      wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
+      lineSwitcher: { step() {} },
+      multiLineScroll: (received, direction) => {
+        calls.push([received, direction]);
+        return true;
+      },
+    });
+    assert.equal(navigation.wheel(event), true);
+    assert.deepEqual(calls, [[event, -1]]);
+  } finally {
+    dispose();
+  }
+});
+
 test("a rebound zoom shortcut keeps its configured direction", () => {
   const dispose = registerEditorShortcuts();
   const zoomOut = TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut;
@@ -136,13 +188,19 @@ test("a custom Alt wheel seek binding does not also zoom the timeline", () => {
   }
 });
 
-test("Shift wheel is unbound by default so it remains available for selection", () => {
+test("Shift wheel remains unbound by default so it remains available for selection", () => {
   const dispose = registerEditorShortcuts();
   try {
     assert.equal(matchTimelineWheel({ deltaY: 100, shiftKey: true }), null);
     assert.equal(matchTimelineWheel({ deltaY: -100, shiftKey: true }), null);
-    assert.equal(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), null);
-    assert.equal(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), null);
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: -1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: 1,
+    });
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,

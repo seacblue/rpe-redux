@@ -261,7 +261,7 @@ test("RPE hotkeys map only commands this editor owns", () => {
   assert.deepEqual(bindings["playback.replay"], ["LEFTBRACKET"]);
   assert.deepEqual(bindings["view.previewAudition"], ["T"]);
   assert.deepEqual(bindings["view.previewAuditionStay"], ["U"]);
-  assert.deepEqual(bindings["navigation.line.next"], ["ALT+1"]);
+  assert.deepEqual(bindings["navigation.line.next"], ["ALT+DIGIT1"]);
   assert.deepEqual(bindings["navigation.line.jump"], ["CTRL"]);
   assert.deepEqual(bindings["timeline.toggleSnapX"], ["CTRL+H"]);
   assert.deepEqual(bindings["view.toggleNotesEvents"], ["ALT+N"]);
@@ -438,7 +438,7 @@ test("migrated key bindings keep the action's wheel gestures", () => {
     });
     assert.equal(result.shortcuts, 1);
     assert.deepEqual(shortcutRegistry.bindingsOf("rpe.migration.wheel"), [
-      { key: "1", modifiers: ["ALT"] },
+      { key: "DIGIT1", modifiers: ["ALT"] },
       { key: "WHEELUP", modifiers: ["CTRL"] },
     ]);
   } finally {
@@ -468,7 +468,7 @@ test("a stale RPE profile gets the default wheel gesture back on re-import", () 
     });
     assert.equal(result.shortcuts, 1);
     assert.deepEqual(shortcutRegistry.bindingsOf("rpe.migration.wheel.stale"), [
-      { key: "2", modifiers: ["ALT"] },
+      { key: "DIGIT2", modifiers: ["ALT"] },
       { key: "WHEELUP", modifiers: ["CTRL"] },
     ]);
   } finally {

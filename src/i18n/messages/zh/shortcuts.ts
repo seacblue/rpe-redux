@@ -77,6 +77,8 @@ export default {
   "shortcuts.editor.timelineForward": "时间轴前进",
   "shortcuts.editor.timelineFastBackward": "时间轴快退（一整个节拍）",
   "shortcuts.editor.timelineFastForward": "时间轴快进（一整个节拍）",
+  "shortcuts.editor.multiLineScrollLeft": "多线面板向左滚动",
+  "shortcuts.editor.multiLineScrollRight": "多线面板向右滚动",
   "shortcuts.editor.resetCamera": "重置视野",
   "shortcuts.editor.toggleGameUi": "显示 / 隐藏游戏内 UI",
   "shortcuts.editor.showLineInfo": "显示 / 隐藏当前线信息",

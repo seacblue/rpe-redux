@@ -23,6 +23,8 @@ export const TIMELINE_WHEEL_SHORTCUT_IDS = Object.freeze({
   fastNext: "navigation.time.fastNext",
   zoomOut: "navigation.timeline.zoom.out",
   zoomIn: "navigation.timeline.zoom.in",
+  multiLineLeft: "navigation.multiLine.scroll.left",
+  multiLineRight: "navigation.multiLine.scroll.right",
 });
 
 const WHEEL_SHORTCUT_IDS = new Set<string>(Object.values(TIMELINE_WHEEL_SHORTCUT_IDS));
@@ -34,7 +36,8 @@ export type TimelineSeekStep = "grid" | "beat";
 export type TimelineWheelAction =
   | { kind: "line"; direction: -1 | 1 }
   | { kind: "seek"; direction: -1 | 1; step: TimelineSeekStep }
-  | { kind: "zoom"; direction: -1 | 1 };
+  | { kind: "zoom"; direction: -1 | 1 }
+  | { kind: "multiLineScroll"; direction: -1 | 1 };
 
 /** Whether a shortcut id is routed by the timeline instead of the canvas matcher. */
 export function isTimelineWheelShortcut(id: string): boolean {
@@ -72,6 +75,12 @@ export function matchTimelineWheel(event: ShortcutEventLike): TimelineWheelActio
   }
   if (bound(event, TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn)) {
     return { kind: "zoom", direction: 1 };
+  }
+  if (bound(event, TIMELINE_WHEEL_SHORTCUT_IDS.multiLineLeft)) {
+    return { kind: "multiLineScroll", direction: -1 };
+  }
+  if (bound(event, TIMELINE_WHEEL_SHORTCUT_IDS.multiLineRight)) {
+    return { kind: "multiLineScroll", direction: 1 };
   }
   return null;
 }

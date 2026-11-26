@@ -78,6 +78,8 @@ export default {
   "shortcuts.editor.timelineForward": "Seek timeline forward",
   "shortcuts.editor.timelineFastBackward": "Fast seek timeline backward (one beat)",
   "shortcuts.editor.timelineFastForward": "Fast seek timeline forward (one beat)",
+  "shortcuts.editor.multiLineScrollLeft": "Scroll multi-line panels left",
+  "shortcuts.editor.multiLineScrollRight": "Scroll multi-line panels right",
   "shortcuts.editor.resetCamera": "Reset the view",
   "shortcuts.editor.toggleGameUi": "Show / hide in-game UI",
   "shortcuts.editor.showLineInfo": "Show / hide line information",
