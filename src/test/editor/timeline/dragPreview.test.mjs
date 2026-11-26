@@ -48,6 +48,34 @@ test("a snapped drag moves by grid spacing from the original note position", () 
   assert.equal(moved.positionX, 172);
 });
 
+test("playback origin changes cannot pull an active note drag", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes = [createNote(1, 100, 37)];
+  const session = new EditorSession(chart);
+  const moved = moveTimelineNote(
+    chart.judgeLineList[0].notes[0],
+    { ...drag(100), originSeconds: 0 },
+    session,
+    { ...context(), origin: 200 },
+  );
+
+  assert.equal(beatValue(moved.startTime), 100);
+});
+
+test("an active drag still applies explicit timeline auto-scroll", () => {
+  const chart = createChart();
+  chart.judgeLineList[0].notes = [createNote(1, 100, 37)];
+  const session = new EditorSession(chart);
+  const moved = moveTimelineNote(
+    chart.judgeLineList[0].notes[0],
+    { ...drag(100), originSeconds: 0, scrollSeconds: 12 },
+    session,
+    { ...context(), origin: 200 },
+  );
+
+  assert.equal(beatValue(moved.startTime), 112);
+});
+
 test("a Z click moves the Hold edge without crossing the drag threshold", () => {
   const chart = createChart();
   chart.judgeLineList[0].notes = [createNote(2, 2, 0, 4)];

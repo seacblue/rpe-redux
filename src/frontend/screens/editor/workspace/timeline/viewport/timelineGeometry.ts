@@ -9,6 +9,7 @@ import * as coreGeometry from "../../../../../../core/edit/timeline/timelineCoor
 import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   type TimelineArea,
+  type TimelineDragGeometry,
   type TimelineNote,
   type TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
@@ -26,8 +27,9 @@ export function point(
   this: TimelineViewportReceiver,
   event: PointerEvent,
   canvas: HTMLCanvasElement = this.notesCanvas,
+  geometry?: Pick<TimelineDragGeometry, "left" | "top">,
 ): TimelinePoint {
-  const rectangle = canvas.getBoundingClientRect();
+  const rectangle = geometry ?? canvas.getBoundingClientRect();
   return { x: event.clientX - rectangle.left, y: event.clientY - rectangle.top };
 }
 

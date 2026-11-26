@@ -43,6 +43,12 @@ import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts
 import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
 import { SELECTION_SHORTCUT_IDS } from "../../../../../../core/edit/selection/control.ts";
 import { matchesSelectionShortcut } from "../selection/selectionShortcuts.ts";
+import {
+  captureNoteDragGeometry,
+  noteDragPoint,
+  noteDragSeconds,
+  noteDragWidth,
+} from "./noteDragGeometry.ts";
 
 /** Publish the live edge of a prekey Hold drag for the inspector. */
 function syncNoteDragPreview(
@@ -78,11 +84,13 @@ function syncNoteDragPreviewChart(
 
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
-  const panelWidth = this.viewport.panelWidth(this.notesCanvas.clientWidth, "notes");
+  const geometry = this.gestures.drag?.geometry;
+  const panelWidth =
+    geometry?.panelWidth ?? this.viewport.panelWidth(this.notesCanvas.clientWidth, "notes");
   return moveTimelineNote(note, this.gestures.drag, this.getSession(), {
     tempo: this.viewport.tempo,
     origin: this.viewport.origin,
-    scale: this.viewport.scaleForArea("notes"),
+    scale: geometry?.scale ?? this.viewport.scaleForArea("notes"),
     division: this.viewport.division,
     panelWidth,
     inset: this.viewport.noteInset(panelWidth),
@@ -96,12 +104,9 @@ export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineN
 
 /** Track the note cursor and advance the active note drag or pan. */
 export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent): void {
-  this.gestures.cursor = this.viewport.point(event);
-  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(
-    this.gestures.cursor.x,
-    this.notesCanvas.clientWidth,
-    "notes",
-  );
+  const width = noteDragWidth(this.gestures.drag, this.notesCanvas.clientWidth);
+  this.gestures.cursor = noteDragPoint(this, event, this.gestures.drag);
+  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(this.gestures.cursor.x, width, "notes");
   this.gestures.clipboardPointer = this.gestures.cursor;
   this.gestures.hoverArea = "notes";
   if (!this.gestures.drag) {
@@ -123,18 +128,13 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     return;
   }
   if (this.gestures.drag) {
-    const previous = this.gestures.drag.current;
-    this.gestures.drag.current = this.gestures.cursor;
+    const drag = this.gestures.drag;
+    const previous = drag.current;
+    drag.current = this.gestures.cursor;
     this.gestures.drag.currentWorldX =
-      this.gestures.cursor.x +
-      this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
-    if (this.gestures.drag.startFactor !== undefined) {
-      this.gestures.drag.currentSeconds =
-        this.viewport.tempo.seconds(this.viewport.origin) +
-        (this.viewport.viewHeight() -
-          this.viewport.judgementOffset -
-          this.gestures.drag.current.y) /
-          this.viewport.scaleForArea("notes");
+      this.gestures.cursor.x + this.viewport.multiLineViewportOffset(width, "notes");
+    if (drag.startFactor !== undefined) {
+      drag.currentSeconds = noteDragSeconds(this, drag);
     }
     const session = this.getSession();
     syncNoteDragPreviewChart(this, session);
@@ -149,7 +149,7 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
         this.notesCanvas.style.cursor = "grabbing";
       }
       if (deltaX !== 0) {
-        this.viewport.panMultiLine(this.notesCanvas.clientWidth, deltaX, "notes");
+        this.viewport.panMultiLine(width, deltaX, "notes");
         this.changed();
       }
       return;
@@ -262,13 +262,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     this.notesCanvas.focus({ preventScroll: true });
   }
   this.notesCanvas.setPointerCapture(event.pointerId);
-  const position = this.viewport.point(event);
+  const geometry = captureNoteDragGeometry(this);
+  const position = this.viewport.point(event, this.notesCanvas, geometry);
   this.gestures.cursor = position;
-  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(
-    position.x,
-    this.notesCanvas.clientWidth,
-    "notes",
-  );
+  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(position.x, geometry.width, "notes");
   this.gestures.clipboardPointer = position;
   this.gestures.hoverArea = "notes";
   this.gestures.overlapPress = null;
@@ -363,6 +360,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: prekeyHold.index,
       lineIndex,
+      geometry,
       startFactor: factor,
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -397,6 +395,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: hit.index,
       lineIndex,
+      geometry,
       startFactor: this.viewport.noteFactorForLine(lineIndex),
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -655,6 +654,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: hit.index,
       lineIndex: hit.lineIndex,
+      geometry,
       startFactor: this.viewport.noteFactorForLine(hit.lineIndex ?? session.lineIndex),
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -711,14 +711,11 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     return;
   }
   const drag = this.gestures.drag;
-  drag.current = this.viewport.point(event);
-  drag.currentWorldX =
-    drag.current.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
+  const width = noteDragWidth(drag, this.notesCanvas.clientWidth);
+  drag.current = noteDragPoint(this, event, drag);
+  drag.currentWorldX = drag.current.x + this.viewport.multiLineViewportOffset(width, "notes");
   if (drag.startFactor !== undefined) {
-    drag.currentSeconds =
-      this.viewport.tempo.seconds(this.viewport.origin) +
-      (this.viewport.viewHeight() - this.viewport.judgementOffset - drag.current.y) /
-        this.viewport.scaleForArea("notes");
+    drag.currentSeconds = noteDragSeconds(this, drag);
   }
   const session = this.getSession();
   this.setPreviewChart(null);
