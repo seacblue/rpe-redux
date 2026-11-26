@@ -6,7 +6,7 @@
  * viewport receiver.
  */
 import * as coreGeometry from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
-import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
+import { beatValue, toBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   type TimelineArea,
   type TimelineDragGeometry,
@@ -275,6 +275,9 @@ export function panMultiLine(
   const current = this.multiLineViewportOffset(width, area);
   const next = coreGeometry.panViewportOffset(width, this.panelLayout(area), current, deltaX);
   this.multiLineScroll[area] = next;
+  // DOM panel chrome subscribes to this snapshot as well as the scrollbar. A
+  // pointer pan must publish the new offset immediately, before the next paint.
+  this.multiLineScrollState.snapshot.update({ value: String(next) });
   return next;
 }
 
@@ -335,24 +338,19 @@ export function beatAt(this: TimelineViewportReceiver, vertical: number): number
 
 /** Beat at a canvas y coordinate, snapped to the current division, as an exact triple. */
 export function snappedBeatTriple(this: TimelineViewportReceiver, vertical: number): Beat {
-  return coreGeometry.snappedBeatTriple(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(), scale: this.scaleForArea(this.getSession().multiLineMode) },
-    this.division,
-    this.tempo,
-  );
+  const height = this.viewHeight();
+  const scale = {
+    ...this.scaleConfig(),
+    scale: this.scaleForArea(this.getSession().multiLineMode),
+  };
+  return this.snapY
+    ? coreGeometry.snappedBeatTriple(vertical, height, scale, this.division, this.tempo)
+    : toBeat(coreGeometry.beatAt(vertical, height, scale, this.tempo));
 }
 
 /** Beat at a canvas y coordinate, snapped to the current division. */
 export function snappedBeat(this: TimelineViewportReceiver, vertical: number): number {
-  return coreGeometry.snappedBeat(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(), scale: this.scaleForArea(this.getSession().multiLineMode) },
-    this.division,
-    this.tempo,
-  );
+  return beatValue(this.snappedBeatTriple(vertical));
 }
 
 /** Canvas y coordinate for a beat in the active area. */
@@ -386,13 +384,11 @@ export function eventBeatAtTriple(
   type: string,
 ): Beat {
   const factor = this.factor;
-  return coreGeometry.snappedBeatTriple(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(factor), scale: this.scaleForArea("events") },
-    this.division,
-    this.tempo,
-  );
+  const height = this.viewHeight();
+  const scale = { ...this.scaleConfig(factor), scale: this.scaleForArea("events") };
+  return this.snapY
+    ? coreGeometry.snappedBeatTriple(vertical, height, scale, this.division, this.tempo)
+    : toBeat(coreGeometry.beatAt(vertical, height, scale, this.tempo));
 }
 
 /** Event beat at a canvas y coordinate, optionally snapped. */
@@ -403,7 +399,7 @@ export function eventBeatAt(
   snap: boolean = false,
 ): number {
   const factor = this.factor;
-  return snap
+  return snap && this.snapY
     ? coreGeometry.snappedBeat(
         vertical,
         this.viewHeight(),

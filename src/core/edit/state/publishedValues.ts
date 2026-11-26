@@ -187,8 +187,11 @@ export const editorScale = defineValue({ id: "editor.scale", initial: "500" });
  */
 export const editorScaleLive = defineValue({ id: "editor.scaleLive", initial: "500" });
 
-/** Whether dragging and placing snap to the beat. */
+/** Whether note placement and horizontal dragging snap to the X grid. */
 export const editorSnapX = defineValue({ id: "editor.snapX", initial: true });
+
+/** Whether placing and dragging snap to the vertical beat grid. */
+export const editorSnapY = defineValue({ id: "editor.snapY", initial: true });
 
 /** Whether the stage draws the realtime preview. */
 export const editorRealtimePreviewEnabled = defineValue({

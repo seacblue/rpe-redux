@@ -114,6 +114,7 @@ export function gridBatchKey(
     palette.gridMajor,
     palette.gridMinor,
     palette.gridSubdivisions.join(","),
+    receiver.viewport.snapY,
     palette.foreground,
     cursor?.x,
     cursor?.y,
@@ -443,12 +444,12 @@ export function grid(
       nearestHover,
       hoverOpacity,
     );
-    if (draws(parts, "lines")) {
+    if (draws(parts, "lines") && this.viewport.snapY !== false) {
       commands.push({
         kind: "fillRect",
-        x: 0,
+        x: 2,
         y: vertical,
-        width,
+        width: Math.max(0, width - 4),
         height: lineWidth,
         color,
         alpha,
@@ -558,16 +559,20 @@ export function gridForLine(
       nearestHover,
       hoverOpacity,
     );
-    if (draws(parts, "lines")) {
-      commands.push({
-        kind: "fillRect",
-        x: left,
-        y: vertical,
-        width,
-        height: lineWidth,
-        color,
-        alpha,
-      });
+    if (draws(parts, "lines") && this.viewport.snapY !== false) {
+      const lineLeft = Math.max(2, left + 2);
+      const lineRight = Math.min(canvasWidth - 2, left + width - 2);
+      if (lineRight > lineLeft) {
+        commands.push({
+          kind: "fillRect",
+          x: lineLeft,
+          y: vertical,
+          width: lineRight - lineLeft,
+          height: lineWidth,
+          color,
+          alpha,
+        });
+      }
     }
     if (draws(parts, "labels") && major && showBeatLabels) {
       commands.push({
@@ -852,35 +857,16 @@ function drawMultiLinePanelLabelsInto(
   context.font = font;
   const labels = visiblePanelLabels(this, width, area, (text) => context.measureText(text).width);
   context.font = previousFont;
-  const multiPanel = this.viewport.panelCount(area) > 1;
   context.fillStyle = palette.headerSurface;
+  const panelEdgeInset = 2;
+  const panelHeaderInset = 1;
   for (const label of labels) {
-    context.fillRect(label.left, 0, label.width, 23);
-  }
-  // The band covers the backdrop separators, so restore the panel edges inside
-  // it and keep the same 23px chrome the event field uses.
-  context.lineWidth = 1;
-  context.strokeStyle = this.appearance.verticalGridColor;
-  for (const label of labels) {
-    if (label.left >= 0 && label.left <= width) {
-      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, label.left)), 23);
-    }
     const right = label.left + label.width;
-    if (right >= 0 && right <= width) {
-      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, right)), 23);
+    const fillLeft = Math.max(panelEdgeInset, label.left) + panelHeaderInset;
+    const fillRight = Math.min(width - panelEdgeInset, right) - panelHeaderInset;
+    if (fillRight > fillLeft) {
+      context.fillRect(fillLeft, 0, fillRight - fillLeft, 23);
     }
-  }
-  if (multiPanel) {
-    context.lineWidth = 2;
-    context.strokeStyle = palette.outline;
-    for (const label of labels) {
-      const raw = label.left + label.width;
-      if (raw >= 0 && raw <= width) {
-        strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
-      }
-    }
-    context.lineWidth = 1;
-    context.strokeStyle = this.appearance.verticalGridColor;
   }
   const commands: RenderCommand[] = [];
   for (const label of labels) {

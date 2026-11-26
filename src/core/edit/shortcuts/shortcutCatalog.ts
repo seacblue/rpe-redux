@@ -102,8 +102,17 @@ const interactionShortcuts: readonly EditorShortcutDefinition[] = [
     category: SHORTCUT_CATEGORIES.editorEditing.id,
     title: "shortcuts.editor.toggleSnapX",
     scope: "editor",
-    // RPE binds its global time-snap toggle here; a fresh install leaves it
-    // unbound and toggles snapping from the timeline controls.
+    // A fresh install leaves this unbound and toggles horizontal snapping from
+    // the timeline control beside the X-axis grid field.
+    defaults: [],
+  },
+  {
+    id: "timeline.toggleSnapY",
+    category: SHORTCUT_CATEGORIES.editorEditing.id,
+    title: "shortcuts.editor.toggleSnapY",
+    scope: "editor",
+    // A fresh install leaves this unbound and toggles beat-time snapping from
+    // the timeline control beside the beat-division field.
     defaults: [],
   },
 ];

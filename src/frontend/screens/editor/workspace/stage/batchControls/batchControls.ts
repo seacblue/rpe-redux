@@ -614,6 +614,7 @@ export class BatchControls {
       scale: this.timeline.viewport.scaleForArea(active.area),
       judgementOffset: this.timeline.viewport.judgementOffset ?? 42,
       division: this.timeline.viewport.division,
+      snapY: this.timeline.viewport.snapY,
       height: active.canvas.clientHeight,
       start,
       point,

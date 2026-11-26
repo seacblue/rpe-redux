@@ -229,6 +229,8 @@ export default {
   "chrome.toolbar.divisionHint": "每拍网格线数量",
   "chrome.toolbar.gridCount": "X 轴网格",
   "chrome.toolbar.gridCountHint": "音符 X 坐标的可选网格线数量",
+  "chrome.toolbar.gridCountSnap": "切换横向网格",
+  "chrome.toolbar.divisionSnap": "切换纵向网格",
 
   "chrome.toolbar.ratio": "预览比例",
   "chrome.toolbar.scrollbar": "工具栏滚动位置",

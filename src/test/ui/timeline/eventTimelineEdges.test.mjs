@@ -1,4 +1,4 @@
-/** Event timeline edge lines use the divider role and sit above the header canvas. */
+/** Multi-line timeline panels keep direct CSS borders at their calculated edges. */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -14,17 +14,29 @@ const styles = readFileSync(
   "utf8",
 );
 
-test("event timeline mounts an edge overlay above the editing canvas", () => {
-  assert.match(canvases, /className="timeline-event-edges"/u);
+test("multi-line timeline fields mount per-panel CSS edge elements", () => {
+  assert.doesNotMatch(canvases, /timeline-(?:note|event)-edges/u);
+  assert.match(canvases, /function TimelinePanelEdges/u);
+  assert.match(canvases, /className="timeline-panel-edges"/u);
+  assert.match(canvases, /className="timeline-panel-edge"/u);
   assert.match(
     styles,
-    /\.timeline-event-edges\s*\{[\s\S]*?grid-column:\s*3;[\s\S]*?z-index:\s*5;[\s\S]*?border-left:\s*1px solid var\(--edge-emphasis\);[\s\S]*?border-right:\s*1px solid var\(--edge-emphasis\);/u,
+    /\.timeline-notes\s*\{[\s\S]*?border-left:\s*1px solid var\(--edge-emphasis\);[\s\S]*?border-right:\s*1px solid var\(--edge-emphasis\);/u,
+  );
+  assert.match(
+    styles,
+    /\.timeline-events\s*\{[\s\S]*?border-left:\s*1px solid var\(--edge-emphasis\);[\s\S]*?border-right:\s*1px solid var\(--edge-emphasis\);/u,
+  );
+  assert.match(
+    styles,
+    /\.timeline-panel-edge\s*\{[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*0;[\s\S]*?left:\s*var\(--timeline-panel-left\);[\s\S]*?width:\s*var\(--timeline-panel-width\);[\s\S]*?border-left:\s*1px solid var\(--edge-emphasis\);[\s\S]*?border-right:\s*1px solid var\(--edge-emphasis\);/u,
+  );
+  assert.match(
+    styles,
+    /\.timeline-panel-edges\s*\{[^}]*?border-left:\s*1px solid var\(--edge-emphasis\);[^}]*?border-right:\s*1px solid var\(--edge-emphasis\);[^}]*\}/u,
   );
 });
 
-test("hidden event layouts remove the overlay", () => {
-  assert.match(
-    styles,
-    /\.editor\.events-hidden[\s\S]*?\.timeline-event-edges[\s\S]*?display:\s*none;/u,
-  );
+test("the cue stays below the direct note border", () => {
+  assert.match(styles, /\.timeline-notes-cue\s*\{[\s\S]*?z-index:\s*4;/u);
 });

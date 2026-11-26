@@ -32,13 +32,12 @@ export class TimelineGridRenderDevice {
       context.rect(packet.clip.left, packet.clip.top, packet.clip.width, packet.clip.height);
       context.clip();
     }
-    const fallbackLines = new Map<
+    const fallbackRects = new Map<
       string,
       {
         readonly color: string;
         readonly alpha: number;
-        readonly lineWidth: number;
-        points: number[];
+        rectangles: Array<[number, number, number, number]>;
       }
     >();
     for (const command of packet.commands) {
@@ -55,15 +54,14 @@ export class TimelineGridRenderDevice {
       }
       if (command.kind === "fillRect") {
         if (!this.lineBatch?.isActive()) {
-          const key = `${command.color}|${command.alpha}|${command.height}`;
-          const line = fallbackLines.get(key) ?? {
+          const key = `${command.color}|${command.alpha}`;
+          const group = fallbackRects.get(key) ?? {
             color: command.color,
             alpha: command.alpha,
-            lineWidth: command.height,
-            points: [],
+            rectangles: [],
           };
-          line.points.push(command.x, command.y, command.x + command.width, command.y);
-          fallbackLines.set(key, line);
+          group.rectangles.push([command.x, command.y, command.width, command.height]);
+          fallbackRects.set(key, group);
         }
         continue;
       }
@@ -83,16 +81,12 @@ export class TimelineGridRenderDevice {
       throw new Error(`timeline_grid_command_unsupported:${command.kind}`);
     }
     if (!this.lineBatch?.isActive()) {
-      for (const line of fallbackLines.values()) {
-        context.globalAlpha = line.alpha;
-        context.strokeStyle = line.color;
-        context.lineWidth = line.lineWidth;
-        context.beginPath();
-        for (let index = 0; index < line.points.length; index += 4) {
-          context.moveTo(line.points[index] ?? 0, line.points[index + 1] ?? 0);
-          context.lineTo(line.points[index + 2] ?? 0, line.points[index + 3] ?? 0);
+      for (const group of fallbackRects.values()) {
+        context.globalAlpha = group.alpha;
+        context.fillStyle = group.color;
+        for (const [x, y, width, height] of group.rectangles) {
+          context.fillRect(x, y, width, height);
         }
-        context.stroke();
       }
     }
     context.restore?.();

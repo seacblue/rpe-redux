@@ -13,7 +13,7 @@ import type { TimelineEventDrawingReceiver } from "../drawing/timelineReceiver.t
 import { readCanvasPalette } from "../../../canvas/palette.ts";
 import { canvasFont } from "../../../canvas/text.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
-import { LINE_LABEL_BASELINE, strokeVerticalGrid } from "../drawing/gridDrawing.ts";
+import { LINE_LABEL_BASELINE } from "../drawing/gridDrawing.ts";
 import type { TimelineOverlayBatch } from "../../../canvas/timelineOverlayBatch.ts";
 import { drawEventText } from "./eventTextDrawing.ts";
 import { multiLineLineLabel } from "../multiLine/multiLineLineLabel.ts";
@@ -207,20 +207,29 @@ export function drawMultiLineEventChrome(
   labelBatch?: TimelineOverlayBatch,
 ): void {
   const palette = receiver.cache.palette() ?? readCanvasPalette();
-  const multiPanel = receiver.viewport.panelCount("events") > 1;
   const font = canvasFont("caption");
   const previousFont = context.font;
   context.font = font;
   const headers = visibleEventHeaders(receiver, width, (text) => context.measureText(text).width);
   context.font = previousFont;
   context.fillStyle = palette.headerSurface;
+  const panelEdgeInset = 2;
+  const panelHeaderInset = 1;
   for (const header of headers) {
     // The five event columns keep a fixed order, so the band names the judge
     // line instead of repeating the track names in every panel.
-    context.fillRect(header.left, 0, header.width, 23);
+    const right = header.left + header.width;
+    const fillLeft = Math.max(panelEdgeInset, header.left) + panelHeaderInset;
+    const fillRight = Math.min(width - panelEdgeInset, right) - panelHeaderInset;
+    const fillWidth = Math.max(0, fillRight - fillLeft);
+    if (fillWidth > 0) {
+      context.fillRect(fillLeft, 0, fillWidth, 23);
+    }
     // The overlay's GPU curves paint above the canvas; queue the band fill and
     // its label on that layer too, after the curves were submitted.
-    labelBatch?.addRect(header.left, 0, header.width, 23, palette.headerSurface);
+    if (fillWidth > 0) {
+      labelBatch?.addRect(fillLeft, 0, fillWidth, 23, palette.headerSurface);
+    }
     drawEventText(
       context,
       labelBatch ?? null,
@@ -231,30 +240,5 @@ export function drawMultiLineEventChrome(
       palette.bottomValue,
       "center",
     );
-  }
-  // Header fills sit above the backdrop separators. Paint the panel edges back
-  // into the band so adjacent windows keep their boundaries.
-  context.lineWidth = 1;
-  context.strokeStyle = receiver.appearance.verticalGridColor;
-  for (const header of headers) {
-    if (header.left >= 0 && header.left <= width) {
-      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, header.left)), 23);
-    }
-    const right = header.left + header.width;
-    if (right >= 0 && right <= width) {
-      strokeVerticalGrid(context, Math.min(width - 0.5, Math.max(0.5, right)), 23);
-    }
-  }
-  if (multiPanel) {
-    context.lineWidth = 2;
-    context.strokeStyle = palette.outline;
-    for (const header of headers) {
-      const raw = header.left + header.width;
-      if (raw >= 0 && raw <= width) {
-        strokeVerticalGrid(context, Math.min(width - 1, Math.max(1, raw)), 23);
-      }
-    }
-    context.lineWidth = 1;
-    context.strokeStyle = receiver.appearance.verticalGridColor;
   }
 }

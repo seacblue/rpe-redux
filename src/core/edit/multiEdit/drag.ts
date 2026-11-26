@@ -5,7 +5,7 @@
  * signature lets a drag restart only when the underlying selection or focus
  * actually changed.
  */
-import { beatValue } from "../../global/chart/timing/beat.ts";
+import { beatValue, toBeat } from "../../global/chart/timing/beat.ts";
 import { snapTime, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
 import type { EditorSession } from "../session/session.ts";
 import type { SelectionSnapshot } from "../selection/snapshot.ts";
@@ -53,6 +53,7 @@ export interface BatchDragGeometry {
   scale: number;
   judgementOffset: number;
   division: number;
+  snapY: boolean;
   height: number;
   start: { x: number; y: number };
   point: { x: number; y: number };
@@ -76,7 +77,11 @@ export function batchDragDeltas(input: BatchDragGeometry): {
   const secondsAt = (y: number, factor: number) =>
     input.tempo.seconds(input.origin) + (input.height - input.judgementOffset - y) / input.scale;
   const beatAt = (y: number, factor: number) =>
-    beatValue(snapTime(secondsAt(y, factor), input.division, input.tempo));
+    beatValue(
+      input.snapY
+        ? snapTime(secondsAt(y, factor), input.division, input.tempo)
+        : toBeat(input.tempo.beat(secondsAt(y, factor))),
+    );
   const deltaX = input.point.x - input.start.x;
   return {
     deltaBeat: beatAt(input.point.y, input.factor) - input.startBeat,

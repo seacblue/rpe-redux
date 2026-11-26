@@ -14,6 +14,7 @@
  */
 import { useRef, useState, type ReactNode, type Ref } from "react";
 import { Icon, iconName } from "../../../../design/components/icon/Icon.tsx";
+import { IconButton } from "../../../../design/components/button/IconButton.tsx";
 import { Input, type InputTextAlign } from "../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../design/components/select/Select.tsx";
 import { values } from "../../../../core/state/values.ts";
@@ -59,6 +60,12 @@ export interface ToolbarNumberFieldProps {
   /** The shell's richer tooltip, drawn by the icon beside the field. */
   tipTitle?: string;
   tipDesc?: string;
+  /** Optional button behavior for the leading icon. */
+  iconAction?: {
+    label: string;
+    checked?: boolean;
+    run: () => void;
+  };
   /**
    * Whether the box may take the text as it is being typed.
    *
@@ -105,6 +112,7 @@ export function ToolbarNumberField({
   inputRef,
   tipTitle,
   tipDesc,
+  iconAction,
   accept,
   commitOnBlur = false,
   commitEmptyOnBlur = false,
@@ -234,6 +242,22 @@ export function ToolbarNumberField({
   );
   if (!icon) {
     return field;
+  }
+  if (iconAction) {
+    return (
+      <div className="redux-group editor-grid">
+        <IconButton
+          icon={iconName(icon)}
+          size={16}
+          label={iconAction.label}
+          active={iconAction.checked}
+          onClick={iconAction.run}
+          data-tip-desc={tipDesc}
+          className="toolbar-field-icon-button"
+        />
+        <label className={fieldClassName}>{field}</label>
+      </div>
+    );
   }
   return (
     <div className="redux-group editor-grid">
@@ -366,6 +390,15 @@ export function toolbarFieldNode(entry: ToolbarField, tRaw: (key: string) => str
       fieldClassName={entry.className}
       tipTitle={entry.tipTitle ? tRaw(entry.tipTitle) : undefined}
       tipDesc={entry.tipDesc ? tRaw(entry.tipDesc) : undefined}
+      iconAction={
+        entry.iconAction
+          ? {
+              label: tRaw(entry.iconAction.label),
+              checked: entry.iconAction.checked?.(),
+              run: entry.iconAction.run,
+            }
+          : undefined
+      }
       accept={entry.accept}
       commitOnBlur={entry.commitOnBlur}
       commitEmptyOnBlur={entry.commitEmptyOnBlur}

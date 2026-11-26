@@ -11,6 +11,7 @@ import {
   editorGridCount,
   editorScale,
   editorSnapX,
+  editorSnapY,
 } from "../../../../core/edit/state/publishedValues.ts";
 import {
   clampTimelineScale,
@@ -40,7 +41,7 @@ interface TimelineControlActions {
   commitNumeric(property: NumericTimelineProperty, rawValue: string): void;
   applyScale(scale: number): void;
   commitScale(): void;
-  toggleSnap(enabled: boolean): void;
+  toggleSnap(axis: "x" | "y"): void;
 }
 
 /** The value a committed number writes back, so the field shows what the document took. */
@@ -97,9 +98,15 @@ export function bindTimelineControlInputs(options: TimelineControlBindingOptions
       editorScale.set(String(timeline.viewport.scale));
       persistEditor();
     },
-    toggleSnap(enabled) {
-      timeline.viewport.snapX = enabled;
-      editorSnapX.set(enabled);
+    toggleSnap(axis) {
+      const enabled = !(axis === "x" ? timeline.viewport.snapX : timeline.viewport.snapY);
+      if (axis === "x") {
+        timeline.viewport.snapX = enabled;
+        editorSnapX.set(enabled);
+      } else {
+        timeline.viewport.snapY = enabled;
+        editorSnapY.set(enabled);
+      }
       persistEditor();
       invalidate();
     },
@@ -110,6 +117,11 @@ export function bindTimelineControlInputs(options: TimelineControlBindingOptions
       actions = null;
     }
   };
+}
+
+/** Toggle one of the timeline's independent horizontal or vertical grids. */
+export function toggleTimelineSnap(axis: "x" | "y"): void {
+  actions?.toggleSnap(axis);
 }
 
 /** Commit one numeric toolbar field through the bound runtime actions. */

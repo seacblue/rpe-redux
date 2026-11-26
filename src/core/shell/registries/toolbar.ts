@@ -213,6 +213,12 @@ export interface ToolbarFieldCommon {
   /** The shell's richer tooltip, drawn by the icon beside the field. */
   tipTitle?: string;
   tipDesc?: string;
+  /** Optional button behavior for the field's leading icon. */
+  iconAction?: {
+    label: string;
+    checked?: () => boolean;
+    run: () => void;
+  };
 }
 
 /** A number box, with bounds the document may move and one place that commits it. */

@@ -17,6 +17,7 @@ import {
   editorGridCount,
   editorScale,
   editorSnapX,
+  editorSnapY,
   editorRealtimePreviewEnabled,
 } from "../../../core/edit/state/publishedValues.ts";
 import "../../../core/settings/features/index.ts";
@@ -119,6 +120,7 @@ export function applyEditorSettings({
   editorGridCount.set(String(timeline.viewport.gridCount));
   editorScale.set(String(timeline.viewport.scale));
   editorSnapX.set(timeline.viewport.snapX);
+  editorSnapY.set(timeline.viewport.snapY);
   editorPreviewRatio.set(config.view.ratio);
   setPitchStrategy(config.pitchStrategy);
   invalidate();

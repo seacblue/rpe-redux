@@ -31,7 +31,6 @@ import {
   editorLineTokens,
   editorPreviewRatio,
   editorRealtimePreviewEnabled,
-  editorSnapX,
 } from "../../../../../../core/edit/state/publishedValues.ts";
 import { lineSelectionGroups } from "../../../../../../core/edit/state/lineSelectionInput.ts";
 import {
@@ -56,7 +55,10 @@ import {
   connectEditing,
   createHistoryTravel,
 } from "../../../../../../core/edit/operations/editing.ts";
-import { bindTimelineControlInputs } from "../../../toolbar/timelineControls.ts";
+import {
+  bindTimelineControlInputs,
+  toggleTimelineSnap,
+} from "../../../toolbar/timelineControls.ts";
 import { bindParentLineControl } from "../../../toolbar/parentLineControls.ts";
 import { registerEditorKeyboardBindings } from "../../../../../platform/shortcuts/editorKeyboard.ts";
 import { samplingActive, startSamplingForSelection } from "../../../sampling/samplingSession.ts";
@@ -367,13 +369,8 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       transport.replayPlayback();
       return Promise.resolve();
     },
-    toggleTimeSnap: () => {
-      const enabled = !deps.timeline.viewport.snapX;
-      deps.timeline.viewport.snapX = enabled;
-      editorSnapX.set(enabled);
-      deps.persistEditor();
-      deps.invalidate();
-    },
+    toggleNoteSnap: () => toggleTimelineSnap("x"),
+    toggleTimeSnap: () => toggleTimelineSnap("y"),
     showLineInfo: deps.showLineInfo,
     sampleSelection: () => startSamplingForSelection(deps.getSession()),
     resetCamera: deps.resetCamera,

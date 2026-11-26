@@ -7,7 +7,10 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { drawEvents } from "../../../frontend/screens/editor/workspace/timeline/events/eventDrawing.ts";
+import {
+  drawEventHeaderBand,
+  drawEvents,
+} from "../../../frontend/screens/editor/workspace/timeline/events/eventDrawing.ts";
 import { t } from "../../../i18n/index.ts";
 
 const palette = {
@@ -72,6 +75,27 @@ function fakeCanvas(width, height, context) {
     getContext: () => context,
   };
 }
+
+test("single-line event header bands soften only the shared inner edges", () => {
+  const context = fakeContext();
+  const queued = [];
+  const batch = { addRect: (...args) => queued.push(args) };
+
+  drawEventHeaderBand(context, batch, 0, 100, palette.headerSurface, true, false);
+  drawEventHeaderBand(context, batch, 100, 100, palette.headerSurface, false, false);
+  drawEventHeaderBand(context, batch, 200, 100, palette.headerSurface, false, true);
+
+  assert.deepEqual(context.calls.fillRect, [
+    { x: 1, y: 0, width: 98.5, height: 23 },
+    { x: 100.5, y: 0, width: 99, height: 23 },
+    { x: 200.5, y: 0, width: 98.5, height: 23 },
+  ]);
+  assert.deepEqual(queued, [
+    [1, 0, 98.5, 23, palette.headerSurface],
+    [100.5, 0, 99, 23, palette.headerSurface],
+    [200.5, 0, 98.5, 23, palette.headerSurface],
+  ]);
+});
 
 /** The judge-line caption the chrome should paint for the fake panel. */
 const headerText = t("editorPanels.timeline.lineHeader", { index: 0, name: "Lead" });
@@ -198,8 +222,9 @@ test("an overlay frame queues the judge-line caption above the band fill", () =>
   assert.equal(fixture.batchTexts[0].x, 100, "the caption is centered over its panel");
   assert.equal(fixture.batchTexts[0].maxWidth, undefined);
   assert.deepEqual(fixture.batchRects, [
-    { x: 2, y: 0, width: 196, height: 23, color: palette.headerSurface },
+    { x: 3, y: 0, width: 194, height: 23, color: palette.headerSurface },
   ]);
+  assert.equal(fixture.live.calls.strokes, 0, "the name band does not paint panel side borders");
   const fillsAfterFirstFrame = fixture.live.calls.fillRect.length;
 
   // The overlay clears its label batch on begin, so a cache-hit frame has to

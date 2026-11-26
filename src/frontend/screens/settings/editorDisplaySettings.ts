@@ -141,6 +141,8 @@ export const displayValues = {
   eventValueFontSize: display("event-value-size", "14"),
   /** Whether dragging a note snaps its X to the grid. */
   snapX: display("timeline-snap-x", true),
+  /** Whether placing and dragging objects snaps their time to the beat grid. */
+  snapY: display("timeline-snap-y", true),
   /** Preview background opacity, 0..1; the declared default is 80/255. */
   backgroundAlpha: display("background-alpha", String(80 / 255)),
   /** Preview and timeline content cadence; ordinary overlays remain at 60 Hz. */
@@ -289,6 +291,7 @@ export function readEditorDisplaySettings() {
       scale: numberOf(displayValues.scale),
       division: numberOf(displayValues.division),
       snapX: flagOf(displayValues.snapX),
+      snapY: flagOf(displayValues.snapY),
       multiLineWindowWidth,
       multiLineMergeNotes: displayValues.multiLineMergeNotes.get(),
       multiLineNoteLineNumbers: displayValues.multiLineNoteLineNumbers.get(),
@@ -335,6 +338,7 @@ export interface EditorSettingsPersistenceSource {
     scale: number;
     division: number;
     snapX: boolean;
+    snapY: boolean;
     cameraX?: number;
   };
   realtimePreview: {
@@ -361,6 +365,7 @@ export function persistEditorSettings({
     "timeline-scale": String(timeline.scale),
     "timeline-division": String(timeline.division),
     "timeline-snap-x": timeline.snapX,
+    "timeline-snap-y": timeline.snapY,
     "preview-camera-x": String(timeline.cameraX),
     "preview-view-divisor": String(realtimePreview.viewDivisor),
     "preview-show-game-ui": realtimePreview.showGameUI ?? displayValues.showGameUI.get(),
