@@ -154,9 +154,9 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.batchControls.sync();
       }
       const beat = tempo.beat(frameSeconds);
-      if (refreshHud) {
-        runtime.updateLineInfo();
-      }
+      // The line-info overlay is a frame readout: its delta is defined by the
+      // previous rendered frame, so it must refresh on every painted frame.
+      runtime.updateLineInfo();
       updatePlaybackViewportOrigin(
         runtime.timeline.viewport,
         beat,

@@ -87,6 +87,13 @@ const viewShortcuts: readonly EditorShortcutDefinition[] = [
     scope: "editor",
     defaults: [{ key: "G", modifiers: ["CTRL", "SHIFT"] }],
   },
+  {
+    id: "view.showLineInfo",
+    category: SHORTCUT_CATEGORIES.editorPlayback.id,
+    title: "shortcuts.editor.showLineInfo",
+    scope: "editor",
+    defaults: [{ key: "TAB" }],
+  },
 ];
 /** Editor shortcuts that change a live editing mode. */
 const interactionShortcuts: readonly EditorShortcutDefinition[] = [
@@ -242,19 +249,6 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     defaults: [{ key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] }],
   },
 ];
-/** Editor shortcuts without default keys but available for custom binding. */
-const lineInfoShortcuts: readonly EditorShortcutDefinition[] = [
-  {
-    id: "view.showLineInfo",
-    category: SHORTCUT_CATEGORIES.editorPlayback.id,
-    title: "shortcuts.editor.showLineInfo",
-    scope: "editor",
-    // Line information remains available through a custom binding; Tab stays
-    // free for focus traversal.
-    defaults: [],
-  },
-];
-
 /** The editor's categories, in the order the settings page lists them. */
 const EDITOR_CATEGORIES: readonly ShortcutCategory[] = [
   SHORTCUT_CATEGORIES.editorEditing,
@@ -296,7 +290,6 @@ export const EDITOR_SHORTCUTS: readonly EditorShortcutDefinition[] = [
   ...playbackShortcuts,
   ...viewShortcuts,
   ...interactionShortcuts,
-  ...lineInfoShortcuts,
   ...multiLineShortcuts,
 ];
 const EDITOR_SHORTCUT_IDS = new Set(EDITOR_SHORTCUTS.map((shortcut) => shortcut.id));

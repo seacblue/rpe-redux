@@ -55,10 +55,10 @@ test("classified paths match normalized native path spelling", async () => {
   const home = createHome({
     classifyPaths: async () => [
       {
-        path: "E:\\\\GAMES\\\\CHART.PEZ",
+        path: "E:\\\\GAMES\\\\CHART",
         kind: "chart",
         format: "rpe",
-        entry: "E:\\\\GAMES\\\\CHART.PEZ",
+        entry: "E:\\\\GAMES\\\\CHART",
         valid: true,
       },
     ],
@@ -68,7 +68,38 @@ test("classified paths match normalized native path spelling", async () => {
     },
   });
   try {
-    assert.deepEqual(await home.importPaths(["e:/games/chart.pez"]), ["rpe-project"]);
+    assert.deepEqual(await home.importPaths(["e:/games/chart"]), ["rpe-project"]);
+  } finally {
+    home.dispose();
+  }
+});
+
+test("classified RPE PEZ files go straight to the native import task", async () => {
+  let rpeFolderProbes = 0;
+  let nativeImports = 0;
+  const home = createHome({
+    importFile: async () => {
+      nativeImports += 1;
+      return "native-pez-project";
+    },
+    classifyPaths: async () => [
+      {
+        path: "E:\\charts\\RPG.pez",
+        kind: "chart",
+        format: "rpe",
+        entry: "E:\\charts\\RPG.pez",
+        valid: true,
+      },
+    ],
+    importRpePath: async () => {
+      rpeFolderProbes += 1;
+      throw new Error("folder probe must not run for a PEZ file");
+    },
+  });
+  try {
+    assert.deepEqual(await home.importPaths(["E:\\charts\\RPG.pez"]), ["native-pez-project"]);
+    assert.equal(nativeImports, 1);
+    assert.equal(rpeFolderProbes, 0);
   } finally {
     home.dispose();
   }
