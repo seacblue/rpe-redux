@@ -1,4 +1,5 @@
 /** Event timeline hover emphasis is painted into the original grid stroke. */
+/* eslint-disable max-lines -- grid geometry and panel-label fixtures share one test seam. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -24,10 +25,11 @@ test("horizontal guide hover fades smoothly while staying uniform across the lin
 });
 
 test("nearby horizontal guides colour only the nearest snapped line", () => {
-  const strokes = [];
+  const fills = [];
   const context = {
     globalAlpha: 1,
     lineWidth: 1,
+    fillStyle: "",
     strokeStyle: "",
     save() {},
     restore() {},
@@ -37,7 +39,10 @@ test("nearby horizontal guides colour only the nearest snapped line", () => {
     moveTo() {},
     lineTo() {},
     stroke() {
-      strokes.push({ color: this.strokeStyle, alpha: this.globalAlpha });
+      throw new Error("horizontal guides must use fillRect");
+    },
+    fillRect() {
+      fills.push({ color: this.fillStyle, alpha: this.globalAlpha });
     },
     fillText() {},
   };
@@ -89,8 +94,8 @@ test("nearby horizontal guides colour only the nearest snapped line", () => {
     "notes",
   );
 
-  assert.ok(strokes.some(({ color, alpha }) => color === "rgba(128,128,128,1)" && alpha === 1));
-  assert.ok(strokes.some(({ color }) => color === "#000000"));
+  assert.ok(fills.some(({ color, alpha }) => color === "rgba(128,128,128,1)" && alpha === 1));
+  assert.ok(fills.some(({ color }) => color === "#000000"));
 });
 
 test("timeline grids keep every visible horizontal guide", () => {
@@ -98,6 +103,58 @@ test("timeline grids keep every visible horizontal guide", () => {
     visibleGridTicks(0, 12, 1, null),
     Array.from({ length: 13 }, (_, i) => i),
   );
+});
+
+test("disabled vertical grid skips horizontal timeline lines", () => {
+  let strokes = 0;
+  const context = {
+    save() {},
+    restore() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {
+      strokes += 1;
+    },
+  };
+  const receiver = {
+    appearance: { barAlpha: 1, barWidth: 3, subdivisionColors: [] },
+    cache: {
+      palette: () => ({
+        gridMajor: "#000000",
+        gridMinor: "#000000",
+        gridSubdivisions: [],
+        foreground: "foreground",
+        playhead: "playhead",
+      }),
+    },
+    gestures: { cursor: null, eventCursor: null, hoverArea: "notes" },
+    getSession: () => ({ multiLineMode: "notes" }),
+    viewport: {
+      snapY: false,
+      notesCanvas: { clientWidth: 100 },
+      eventsCanvas: { clientWidth: 100 },
+      factorForLine: () => 1,
+      factor: 1,
+      tempo: { seconds: (beat) => beat, beat: (seconds) => seconds },
+      origin: 0,
+      division: 4,
+      judgementOffset: 0,
+      scaleForArea: () => 100,
+    },
+  };
+
+  grid.call(
+    receiver,
+    context,
+    100,
+    100,
+    0,
+    { lines: true, labels: false, playhead: false },
+    "notes",
+  );
+
+  assert.equal(strokes, 0);
 });
 
 test("multi-line beat labels only render in the screen-leftmost visible panel", () => {
@@ -160,6 +217,9 @@ test("a constant-tempo division-six grid keeps evenly spaced horizontal guides",
     },
     lineTo() {},
     stroke() {},
+    fillRect(_x, y) {
+      positions.push(y);
+    },
   };
   const receiver = {
     appearance: {
@@ -299,9 +359,9 @@ test("nearby-only multi-line grids submit every horizontal tick in every panel",
       return counts;
     }, new Map()),
     new Map([
-      [0, 25],
-      [100, 25],
-      [200, 25],
+      [2, 25],
+      [102, 25],
+      [202, 25],
     ]),
   );
   assert.ok(rectangles.every(([, , , , , alpha]) => alpha > 0));
@@ -422,22 +482,20 @@ test("nearby vertical guides submit every pixel segment, including transparent o
 });
 
 test("the event grid paints the hovered horizontal line with the configured colour", () => {
-  const strokes = [];
-  let strokeStyle = "";
+  const fills = [];
   const context = {
+    globalAlpha: 1,
+    fillStyle: "",
     beginPath() {},
     moveTo() {},
     lineTo() {},
     stroke() {
-      strokes.push(strokeStyle);
+      throw new Error("horizontal guides must use fillRect");
+    },
+    fillRect() {
+      fills.push({ color: this.fillStyle, alpha: this.globalAlpha });
     },
     fillText() {},
-    set strokeStyle(value) {
-      strokeStyle = value;
-    },
-    get strokeStyle() {
-      return strokeStyle;
-    },
   };
   const receiver = {
     appearance: {
@@ -474,25 +532,22 @@ test("the event grid paints the hovered horizontal line with the configured colo
 
   grid.call(receiver, context, 100, 100, 0, { lines: true }, "events");
 
-  assert.ok(strokes.includes("rgba(128,128,128,1)"));
-  assert.ok(!strokes.includes("#FFFFFF80"));
+  assert.ok(fills.some(({ color }) => color === "rgba(128,128,128,1)"));
+  assert.ok(!fills.some(({ color }) => color === "#FFFFFF80"));
 });
 
 test("a multi-line event grid keeps the hovered line inside its panel", () => {
-  const segments = [];
+  const rectangles = [];
   const context = {
     save() {},
     restore() {},
     beginPath() {},
     rect() {},
     clip() {},
-    moveTo(x, y) {
-      segments.push(["move", x, y]);
+    fillStyle: "",
+    fillRect(x, y, width, height) {
+      rectangles.push([x, y, width, height]);
     },
-    lineTo(x, y) {
-      segments.push(["line", x, y]);
-    },
-    stroke() {},
     fillText() {},
     strokeStyle: "",
   };
@@ -530,10 +585,82 @@ test("a multi-line event grid keeps the hovered line inside its panel", () => {
     },
   };
 
-  gridForLine.call(receiver, context, 50, 30, 100, 0, 1, false, { lines: true }, "events");
+  gridForLine.call(
+    receiver,
+    context,
+    50,
+    30,
+    100,
+    0,
+    1,
+    false,
+    { lines: true, labels: false, playhead: false },
+    "events",
+  );
 
-  assert.ok(segments.length > 0);
-  assert.ok(segments.every(([kind, x]) => (kind === "move" ? x === 50 : x === 80)));
+  assert.ok(rectangles.length > 0);
+  assert.ok(rectangles.every(([x, _y, width]) => x === 52 && x + width === 78));
+});
+
+test("a clipped multi-line panel keeps horizontal guides inside the canvas edges", () => {
+  const rectangles = [];
+  const batch = {
+    isActive: () => true,
+    addRect(...args) {
+      rectangles.push(args);
+    },
+  };
+  const receiver = {
+    appearance: { barAlpha: 1, barWidth: 3, subdivisionColors: [] },
+    cache: {
+      palette: () => ({
+        gridMajor: "#000000",
+        gridMinor: "#000000",
+        gridSubdivisions: [],
+      }),
+    },
+    gestures: { cursor: null, eventCursor: null, hoverArea: undefined },
+    getSession: () => ({ multiLineMode: "notes" }),
+    viewport: {
+      notesCanvas: { clientWidth: 100 },
+      eventsCanvas: { clientWidth: 100 },
+      lineIndexAt: () => 0,
+      factorForLine: () => 1,
+      factor: 1,
+      tempo: { seconds: (beat) => beat, beat: (seconds) => seconds },
+      origin: 0,
+      division: 4,
+      judgementOffset: 0,
+      scaleForArea: () => 100,
+      verticalForLine: () => 50,
+    },
+    notesGridBatch: batch,
+    eventsGridBatch: batch,
+    notesPlayheadBatch: { isActive: () => false },
+    eventsPlayheadBatch: { isActive: () => false },
+  };
+
+  gridForLine.call(
+    receiver,
+    {
+      save() {},
+      restore() {},
+      beginPath() {},
+      rect() {},
+      clip() {},
+    },
+    -10,
+    30,
+    100,
+    0,
+    0,
+    false,
+    { lines: true, labels: false, playhead: false },
+    "notes",
+  );
+
+  assert.ok(rectangles.length > 0);
+  assert.ok(rectangles.every(([x, _y, width]) => x >= 2 && x + width <= 98));
 });
 
 /**
@@ -551,6 +678,7 @@ function panelLabelReceiver(
 ) {
   const labels = [];
   const bands = [];
+  let strokes = 0;
   const context = {
     globalAlpha: 1,
     font: "",
@@ -566,7 +694,9 @@ function panelLabelReceiver(
     clip() {},
     moveTo() {},
     lineTo() {},
-    stroke() {},
+    stroke() {
+      strokes += 1;
+    },
     fillRect(x, y, width, height) {
       bands.push({ x, y, width, height, color: this.fillStyle });
     },
@@ -601,19 +731,27 @@ function panelLabelReceiver(
       visiblePanelRange: () => [0, 1],
     },
   };
-  return { receiver, context, labels, bands };
+  return {
+    receiver,
+    context,
+    labels,
+    bands,
+    get strokes() {
+      return strokes;
+    },
+  };
 }
 
 test("multi-line note panels caption the judge line by number and name", () => {
-  const { receiver, context, labels, bands } = panelLabelReceiver("multi");
+  const { receiver, context, labels, bands, strokes } = panelLabelReceiver("multi");
 
   drawMultiLinePanelLabels.call(receiver, context, 240, 300, "notes");
 
   assert.deepEqual(
     bands,
     [
-      { x: 0, y: 0, width: 100, height: 23, color: "#202020" },
-      { x: 120, y: 0, width: 100, height: 23, color: "#202020" },
+      { x: 3, y: 0, width: 96, height: 23, color: "#202020" },
+      { x: 121, y: 0, width: 98, height: 23, color: "#202020" },
     ],
     "each panel paints the same 23px header band as the event field",
   );
@@ -638,6 +776,7 @@ test("multi-line note panels caption the judge line by number and name", () => {
     labels.every(({ align }) => align === "center"),
     "the caption uses centered text alignment",
   );
+  assert.equal(strokes, 0, "the name band does not paint panel side borders");
 });
 
 test("multi-line note panels truncate a name that does not fit the panel", () => {

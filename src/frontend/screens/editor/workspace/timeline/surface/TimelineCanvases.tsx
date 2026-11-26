@@ -5,7 +5,18 @@
  * DOM structure and listener attachment live here; painting and gesture behavior
  * belong to the timeline engine.
  */
-import { useLayoutEffect, useRef, type Ref } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type Ref,
+} from "react";
+import {
+  editorMultiLineActive,
+  editorMultiLineMode,
+} from "../../../../../../core/edit/state/publishedValues.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { mergeRefs } from "../../../../../platform/mergeRefs.ts";
 import { onboardingAnchorRef } from "../../../../../onboarding/anchors.ts";
@@ -15,6 +26,7 @@ import { useTimelineRuntime } from "../../runtime/providers/TimelineProvider.tsx
 import { useTimelineDomSurface } from "./TimelineDomSurface.tsx";
 import type { TimelinePointerCanvasBindings, TimelineStripBindings } from "./timelineBindings.ts";
 import { NoteTimelineRangeOverlay } from "../notes/NoteTimelineRangeOverlay.tsx";
+import type { MultiLineScrollSnapshot } from "../multiLine/multiLineScrollBinding.ts";
 import { TimelineMarkerRail } from "./TimelineMarkerRail.tsx";
 
 /** One overview strip canvas with its pointer bindings. */
@@ -87,6 +99,102 @@ function BatchCanvas({
   surfaceRef: Ref<HTMLCanvasElement>;
 }) {
   return <canvas className={className} ref={surfaceRef} aria-hidden="true" />;
+}
+
+const FALLBACK_MULTI_LINE_SNAPSHOT = { visible: true, max: "0", value: "0" } as const;
+const EMPTY_SUBSCRIBE = () => () => {};
+const getEmptyMultiLineSnapshot = () => FALLBACK_MULTI_LINE_SNAPSHOT;
+
+/** Render CSS borders at the calculated left and right edge of every visible panel. */
+function TimelinePanelEdges({
+  notesCanvas,
+  eventsCanvas,
+}: {
+  notesCanvas: { readonly current: HTMLCanvasElement | null };
+  eventsCanvas: { readonly current: HTMLCanvasElement | null };
+}) {
+  const runtime = useTimelineRuntime();
+  const active = useSyncExternalStore(
+    editorMultiLineActive.subscribe,
+    editorMultiLineActive.get,
+    editorMultiLineActive.get,
+  );
+  const mode = useSyncExternalStore(
+    editorMultiLineMode.subscribe,
+    editorMultiLineMode.get,
+    editorMultiLineMode.get,
+  );
+  const scrollState = runtime?.multiLineScrollState;
+  useSyncExternalStore<MultiLineScrollSnapshot>(
+    scrollState?.snapshot.subscribe ?? EMPTY_SUBSCRIBE,
+    scrollState?.snapshot.get ?? getEmptyMultiLineSnapshot,
+    scrollState?.snapshot.get ?? getEmptyMultiLineSnapshot,
+  );
+  const [canvasWidths, setCanvasWidths] = useState({ notes: 0, events: 0 });
+
+  useLayoutEffect(() => {
+    const canvases = [notesCanvas.current, eventsCanvas.current].filter(
+      (canvas): canvas is HTMLCanvasElement => canvas !== null,
+    );
+    if (canvases.length === 0) {
+      return;
+    }
+    const update = () =>
+      setCanvasWidths({
+        notes: notesCanvas.current?.clientWidth ?? 0,
+        events: eventsCanvas.current?.clientWidth ?? 0,
+      });
+    update();
+    const observer = new ResizeObserver(update);
+    canvases.forEach((canvas) => observer.observe(canvas));
+    return () => observer.disconnect();
+  }, [notesCanvas, eventsCanvas, mode]);
+
+  const area =
+    canvasWidths.events > 0 && canvasWidths.notes === 0
+      ? "events"
+      : canvasWidths.notes > 0 && canvasWidths.events === 0
+        ? "notes"
+        : mode;
+  const width = canvasWidths[area];
+  if (!active || !runtime || !width) {
+    return null;
+  }
+  const timeline = runtime.timeline;
+  const panelCount = timeline.viewport.panelCount(area);
+  const panelWidth = timeline.viewport.panelWidth(width, area);
+  const panelGap = timeline.viewport.panelGap(width, area);
+  const panelStride = panelWidth + panelGap;
+  const offset = timeline.viewport.multiLineViewportOffset(width, area);
+  const [firstPanel, lastPanel] = timeline.viewport.visiblePanelRange(width, area);
+  if (panelCount < 1 || panelWidth <= 0 || panelStride <= 0 || firstPanel > lastPanel) {
+    return null;
+  }
+
+  const edges = [];
+  for (let panel = firstPanel; panel <= lastPanel; panel += 1) {
+    const left = panel * panelStride - offset;
+    if (left >= width || left + panelWidth <= 0) {
+      continue;
+    }
+    edges.push(
+      <div
+        className="timeline-panel-edge"
+        key={panel}
+        style={
+          {
+            "--timeline-panel-left": `${left}px`,
+            "--timeline-panel-width": `${panelWidth}px`,
+          } as CSSProperties
+        }
+      />,
+    );
+  }
+  return (
+    <div className="timeline-panel-edges" aria-hidden="true">
+      {edges}
+    </div>
+  );
 }
 
 /** Attach a non-passive wheel listener so timeline input can prevent scrolling. */
@@ -187,8 +295,7 @@ export function TimelineCanvases() {
         className="timeline-event-overlay-batch"
         surfaceRef={surface.attach.eventOverlayBatch}
       />
-      {/* The event boundary is a DOM layer so the canvas header cannot cover it. */}
-      <div className="timeline-event-edges" aria-hidden="true" />
+      <TimelinePanelEdges notesCanvas={notes} eventsCanvas={events} />
       <OverviewStrip
         name="history-strip"
         bindings={activeOverview?.history}

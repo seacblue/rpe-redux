@@ -173,7 +173,9 @@ export interface EditorKeyboardActionDependencies {
   stopPlaybackStay: () => void;
   /** Seek to the start and play from there. */
   replayPlayback: () => Promise<unknown>;
-  /** Toggle time snapping for placing and dragging objects. */
+  /** Toggle horizontal note-position snapping. */
+  toggleNoteSnap: () => void;
+  /** Toggle vertical beat-time snapping for placing and dragging objects. */
   toggleTimeSnap: () => void;
   showLineInfo: () => void;
   /** Opens the workspace sampler for the single selected event's anchor. */
@@ -343,6 +345,8 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       await deps.replayPlayback();
     } else if (action === "timeline.toggleSnapX") {
+      deps.toggleNoteSnap();
+    } else if (action === "timeline.toggleSnapY") {
       deps.toggleTimeSnap();
     } else if (action === "view.showLineInfo") {
       deps.showLineInfo();

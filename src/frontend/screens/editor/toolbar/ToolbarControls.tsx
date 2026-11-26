@@ -24,9 +24,11 @@ import {
   editorMultiLineActive,
   editorPreviewRatio,
   editorRate,
+  editorSnapX,
+  editorSnapY,
 } from "../../../../core/edit/state/publishedValues.ts";
 import { parseLineSelectionInput } from "../../../../core/edit/state/lineSelectionInput.ts";
-import { commitTimelineNumeric } from "./timelineControls.ts";
+import { commitTimelineNumeric, toggleTimelineSnap } from "./timelineControls.ts";
 import { SCREEN_RATIOS, viewControls } from "../workspace/runtime/commands/viewControls.ts";
 import { getEditorRegionSnapshot } from "../workspace/runtime/commands/viewControls.ts";
 import { transportControlNode } from "../../../chrome/transport/TransportControls.tsx";
@@ -170,6 +172,11 @@ const ROW_ONE: readonly ToolbarEntry[] = [
     row: 1,
     order: 60,
     icon: "linesHorizontal",
+    iconAction: {
+      label: "chrome.toolbar.divisionSnap",
+      checked: () => editorSnapY.get(),
+      run: () => toggleTimelineSnap("y"),
+    },
     className: "division-field",
     min: 1,
     max: 100,
@@ -261,6 +268,11 @@ const ROW_TWO: readonly ToolbarEntry[] = [
     row: 2,
     order: 40,
     icon: "linesVertical",
+    iconAction: {
+      label: "chrome.toolbar.gridCountSnap",
+      checked: () => editorSnapX.get(),
+      run: () => toggleTimelineSnap("x"),
+    },
     className: "grid-count-field",
     min: 1,
     max: 100,

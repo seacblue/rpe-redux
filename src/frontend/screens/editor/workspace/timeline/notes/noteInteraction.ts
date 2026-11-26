@@ -96,6 +96,7 @@ export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineN
     inset: this.viewport.noteInset(panelWidth),
     gridCount: this.viewport.gridCount,
     snapX: this.viewport.snapX,
+    snapY: this.viewport.snapY,
     factor: this.viewport.noteFactorForLine(
       this.gestures.drag?.lineIndex ?? this.getSession().lineIndex,
     ),

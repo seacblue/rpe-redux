@@ -263,7 +263,7 @@ test("RPE hotkeys map only commands this editor owns", () => {
   assert.deepEqual(bindings["view.previewAuditionStay"], ["U"]);
   assert.deepEqual(bindings["navigation.line.next"], ["ALT+DIGIT1"]);
   assert.deepEqual(bindings["navigation.line.jump"], ["CTRL"]);
-  assert.deepEqual(bindings["timeline.toggleSnapX"], ["CTRL+H"]);
+  assert.deepEqual(bindings["timeline.toggleSnapY"], ["CTRL+H"]);
   assert.deepEqual(bindings["view.toggleNotesEvents"], ["ALT+N"]);
   assert.deepEqual(bindings["edit.undo"], ["CTRL+Z"]);
   assert.deepEqual(bindings["edit.redo"], ["CTRL+Y"]);

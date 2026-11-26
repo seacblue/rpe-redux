@@ -319,7 +319,8 @@ test("RPE playback and clipboard actions dispatch to their owner", async () => {
     stopPlayback: () => calls.push("stop"),
     stopPlaybackStay: () => calls.push("stay"),
     replayPlayback: async () => calls.push("replay"),
-    toggleTimeSnap: () => calls.push("snap"),
+    toggleNoteSnap: () => calls.push("snap-x"),
+    toggleTimeSnap: () => calls.push("snap-y"),
     pasteSelection: (options) => calls.push(["paste", options]),
     // The keyboard layer routes playback keys to transport callbacks; the
     // playback commands own the preview layout through the view controls.
@@ -336,13 +337,15 @@ test("RPE playback and clipboard actions dispatch to their owner", async () => {
   await runEditorKeyboardAction(event, "playback.stopStay", "notes", deps);
   await runEditorKeyboardAction(event, "playback.replay", "notes", deps);
   await runEditorKeyboardAction(event, "timeline.toggleSnapX", "notes", deps);
+  await runEditorKeyboardAction(event, "timeline.toggleSnapY", "notes", deps);
   await runEditorKeyboardAction(event, "edit.paste.keepTimeMirror", "notes", deps);
   assert.deepEqual(calls, [
     "start",
     "stop",
     "stay",
     "replay",
-    "snap",
+    "snap-x",
+    "snap-y",
     ["paste", { keepTime: true, mirror: true }],
   ]);
 });

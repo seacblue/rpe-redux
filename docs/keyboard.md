@@ -21,6 +21,8 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Clear clipboard                         | `Ctrl+Shift+Delete`            |
 | Select all                              | `Ctrl+A`                       |
 | Save chart                              | `Ctrl+S`                       |
+| Toggle horizontal grid                  | Unbound (set in Settings)      |
+| Toggle vertical grid                    | Unbound (set in Settings)      |
 
 `R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. For keyboard event placement, the key that finishes the two-key gesture controls hooking: Q synchronizes the event's two values, while R leaves them independent. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise. Clipboard start and end jumps have no default key; assign them in **Settings → Shortcuts** when needed. The chart clipboard is app-private and stays in the local preference store, so copying notes and events does not write chart data to the operating system's text clipboard; the current entry is restored when another chart is opened. When the clipboard ghost preview is enabled, the current note and event skins show the clipboard at the pointer's snapped paste target with translucent alpha. Clearing the clipboard keeps the remembered clipboard-history entries.
 

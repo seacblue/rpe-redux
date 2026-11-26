@@ -174,6 +174,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "panelCount"
     | "timeAt"
     | "tempo"
+    | "snapY"
     | "origin"
     | "viewHeight"
     | "judgementOffset"

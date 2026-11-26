@@ -43,6 +43,7 @@ type ViewportSettings = Pick<
   | "scale"
   | "division"
   | "snapX"
+  | "snapY"
   | "multiLineWindowWidth"
   | "scrollSpeed"
   | "judgementOffset"
@@ -94,6 +95,7 @@ export class TimelineViewport {
   scale = TIMELINE_SCALE_DEFAULT;
   division = 4;
   snapX = true;
+  snapY = true;
   gridCount = 11;
   originalPanelWidth = 0;
   exclusiveRatio = 0.75;
@@ -219,6 +221,7 @@ export class TimelineViewport {
       scale,
       division,
       snapX,
+      snapY,
       multiLineWindowWidth,
       scrollSpeed,
       judgementOffset,
@@ -230,6 +233,7 @@ export class TimelineViewport {
       scale: clampTimelineScale(scale),
       division,
       snapX,
+      snapY,
       multiLineWindowWidth: clampMultiLineWindowWidth(multiLineWindowWidth),
       scrollSpeed,
       judgementOffset,
@@ -247,9 +251,9 @@ export class TimelineViewport {
   panelLayout(area: TimelineArea): TimelinePanelLayout {
     const session = this.getSession();
     const count = this.panelCount(area);
-    // Event windows separate at one eighth of a window; note panels keep their
-    // narrower surface gap. Both values still come from this layout.
-    const gapRatio = area === "events" ? 1 / 8 : 0.04;
+    // Note and event windows share one surface gap so their panel widths stay
+    // identical when the same multi-line selection is shown in either mode.
+    const gapRatio = 0.04;
     return {
       active: session.multiLineActive,
       count,

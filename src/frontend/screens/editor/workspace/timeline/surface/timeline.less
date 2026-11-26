@@ -370,6 +370,12 @@ canvas {
   background: transparent;
 }
 
+.editor.multi-notes .timeline-notes,
+.editor.multi-events .timeline-events {
+  border-left: 0;
+  border-right: 0;
+}
+
 .timeline-note-batch {
   grid-column: 2;
   grid-row: 1;
@@ -389,9 +395,9 @@ canvas {
 .timeline-notes-cue {
   grid-column: 2;
   grid-row: 1;
-  // Temporarily keep the cue above every timeline and developer overlay while
-  // validating that the indicator is not hidden by a sibling canvas layer.
-  z-index: var(--z-performance-hud);
+  // Keep the cue below the DOM edge overlay so the field boundary remains
+  // visible while the cue indicator still sits above the editing canvases.
+  z-index: 4;
   pointer-events: none;
   background: transparent;
 }
@@ -399,6 +405,8 @@ canvas {
 .timeline-events {
   grid-column: 3;
   grid-row: 1;
+  border-left: 1px solid var(--edge-emphasis);
+  border-right: 1px solid var(--edge-emphasis);
   position: relative;
   z-index: 3;
   background: transparent;
@@ -418,19 +426,6 @@ canvas {
   z-index: 4;
   pointer-events: none;
   background: transparent;
-}
-
-// The event boundary is separate from the editing canvas because the canvas
-// paints its header after the grid. Keeping this line in a later DOM layer
-// makes it visible through both the header fill and its labels.
-.timeline-event-edges {
-  grid-column: 3;
-  grid-row: 1;
-  z-index: 5;
-  box-sizing: border-box;
-  border-left: 1px solid var(--edge-emphasis);
-  border-right: 1px solid var(--edge-emphasis);
-  pointer-events: none;
 }
 
 .timeline-strip {
@@ -495,6 +490,37 @@ canvas {
   background: var(--timeline-surface);
 }
 
+// Multi-line fields fill the timeline between the overview tracks. Frame the
+// whole timeline below the name band so the outer edge is independent of the
+// active field's grid track.
+.timeline-panel-edges {
+  display: none;
+  grid-row: 1;
+  position: relative;
+  z-index: 6;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-left: 1px solid var(--edge-emphasis);
+  border-right: 1px solid var(--edge-emphasis);
+  pointer-events: none;
+}
+
+.editor.multi-notes .timeline-panel-edges,
+.editor.multi-events .timeline-panel-edges {
+  display: block;
+}
+
+.timeline-panel-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--timeline-panel-left);
+  width: var(--timeline-panel-width);
+  box-sizing: border-box;
+  border-left: 1px solid var(--edge-emphasis);
+  border-right: 1px solid var(--edge-emphasis);
+}
+
 .editor.notes-hidden .timeline-notes,
 .editor.notes-hidden .timeline-notes-backdrop,
 .editor.notes-hidden .timeline-notes-grid-batch,
@@ -513,7 +539,6 @@ canvas {
 .editor.events-hidden .timeline-events-playhead-batch,
 .editor.events-hidden .timeline-event-batch,
 .editor.events-hidden .timeline-event-overlay-batch,
-.editor.events-hidden .timeline-event-edges,
 .editor.events-hidden .layer-buttons {
   display: none;
 }
@@ -566,6 +591,7 @@ canvas {
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
   & .timeline-notes-cue,
+  & .timeline-panel-edges,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {
@@ -599,6 +625,7 @@ canvas {
   & .timeline-note-batch,
   & .timeline-note-solid-batch,
   & .timeline-notes-cue,
+  & .timeline-panel-edges,
   & .timeline-events,
   & .timeline-event-batch,
   & .timeline-event-overlay-batch {

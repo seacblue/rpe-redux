@@ -49,6 +49,27 @@ test("merged note lanes reveal vertical guides around the pointer", () => {
   assert.ok(strokes > 0);
 });
 
+test("disabled horizontal grid skips note lane guides", () => {
+  let strokes = 0;
+  const receiver = {
+    notesBackdrop: {},
+    cache: { canvasLayer: () => null },
+    appearance: {},
+    gestures: { hoverArea: "notes", cursor: null },
+    getSession: () => ({ notesMode: "notes", lineIndex: 0, targetLineIndices: [0] }),
+    viewport: { snapX: false },
+  };
+  const context = {
+    stroke() {
+      strokes += 1;
+    },
+  };
+
+  drawNoteLanes(receiver, context, 100, 100);
+
+  assert.equal(strokes, 0);
+});
+
 test("note lanes extend outside the authored range at the same scale", () => {
   const positions = [];
   const styles = [];
@@ -94,6 +115,6 @@ test("note lanes extend outside the authored range at the same scale", () => {
 
   drawNoteLanes(receiver, context, 100, 100);
 
-  assert.deepEqual(positions, [0, 25, 50, 75, 100]);
-  assert.equal(styles[0], "#222222");
+  assert.deepEqual(positions, [25, 50, 75]);
+  assert.equal(styles[0], "#111111");
 });

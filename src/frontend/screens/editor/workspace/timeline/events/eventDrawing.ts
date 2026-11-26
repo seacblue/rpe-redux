@@ -71,6 +71,29 @@ interface EventCurveEntry {
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
 const EMPTY_SELECTION = new Set<string>();
 const EMPTY_SELECTED_INDEXES = new Set<number>();
+const EVENT_HEADER_INSET = 1;
+
+/** Paint one header band; shared column edges use a half inset to expose one line. */
+export function drawEventHeaderBand(
+  context: CanvasRenderingContext2D,
+  labelBatch: TimelineOverlayBatch | null,
+  left: number,
+  width: number,
+  color: string,
+  outerLeft: boolean,
+  outerRight: boolean,
+): void {
+  const leftInset = outerLeft ? EVENT_HEADER_INSET : EVENT_HEADER_INSET / 2;
+  const rightInset = outerRight ? EVENT_HEADER_INSET : EVENT_HEADER_INSET / 2;
+  const fillLeft = left + leftInset;
+  const fillWidth = Math.max(0, width - leftInset - rightInset);
+  if (fillWidth <= 0) {
+    return;
+  }
+  context.fillStyle = color;
+  context.fillRect(fillLeft, 0, fillWidth, 23);
+  labelBatch?.addRect(fillLeft, 0, fillWidth, 23, color);
+}
 
 /** Draws clipboard events at the current paste target through the event skin. */
 function drawClipboardGhostEvents(
@@ -557,9 +580,15 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     );
     if (type === "paintEvents") {
       this.drawShaderEvents(context, visibleEntries, channel, width, height, selectedIndexes);
-      context.fillStyle = palette.headerSurface;
-      context.fillRect(horizontal, 0, channelWidth, 23);
-      overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
+      drawEventHeaderBand(
+        context,
+        overlayBatch,
+        horizontal,
+        channelWidth,
+        palette.headerSurface,
+        channel === 0,
+        channel === eventTypeCount - 1,
+      );
       const shaderLabel = t("editorPanels.timeline.shaderTrack");
       const shaderX = horizontal + channelWidth / 2;
       drawEventText(
@@ -763,11 +792,18 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         valueFont,
       );
     }
-    context.fillStyle = palette.headerSurface;
-    context.fillRect(horizontal, 0, channelWidth, 23);
     // The easing/curve overlay is a GPU layer above this canvas; queue the same
-    // header fill after its curves so easing never covers the column labels.
-    overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
+    // inset header fill after its curves so easing never covers the column labels
+    // or the CSS field edges.
+    drawEventHeaderBand(
+      context,
+      overlayBatch,
+      horizontal,
+      channelWidth,
+      palette.headerSurface,
+      channel === 0,
+      channel === eventTypeCount - 1,
+    );
     const headerLabel = headerLabels[channel];
     if (headerLabel) {
       drawEventText(
@@ -846,7 +882,6 @@ export function drawMultiLineEvents(
     const verticalAt = createVerticalAtBeat(this, lineFactor, height);
     const eventBeatRange = this.viewport.beatRangeForLine(lineIndex, height);
     const offset = panel * panelStride - viewportOffset + eventInset;
-    const contentRight = offset + channelWidth * eventTypes.length;
     const layer: TimelineEventLayer = this.gestures.extended
       ? {
           ...(session.chart.judgeLineList?.[lineIndex]?.extended ?? {}),
@@ -864,13 +899,6 @@ export function drawMultiLineEvents(
         : eventLayerOf(
             session.chart.judgeLineList?.[lineIndex]?.eventLayers?.[this.gestures.layer],
           );
-    if (!eventTypes.length) {
-      // Every ordinary track is hidden. Keep the panel edges so the field still
-      // reads as one empty multi-line panel instead of an unclipped void.
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      strokeVerticalGrid(separators, Math.max(0.5, offset), height);
-      strokeVerticalGrid(separators, Math.min(width - 0.5, offset + contentWidth), height);
-    }
     const lineSelection =
       session.multiEventSelection?.get(lineIndex) ??
       (lineIndex === session.lineIndex ? session.eventSelection : EMPTY_SELECTION);
@@ -879,15 +907,11 @@ export function drawMultiLineEvents(
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
       const channelBoundary = offset + channel * channelWidth;
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      if (channel === 0) {
+      separators.lineWidth = 1;
+      if (channel > 0) {
         separators.strokeStyle = this.appearance.verticalGridColor;
-        strokeVerticalGrid(separators, Math.max(0.5, offset), height);
-        separators.strokeStyle = this.appearance.verticalGridColor;
-        strokeVerticalGrid(separators, Math.min(width - 0.5, contentRight), height);
+        strokeVerticalGrid(separators, channelBoundary, height);
       }
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      strokeVerticalGrid(separators, channelBoundary, height);
       const events = layer[type] ?? EMPTY_EVENTS;
       const display = this.cache.eventDisplay(session.chart, events);
       const { ranges } = display;
@@ -1115,15 +1139,6 @@ export function drawMultiLineEvents(
     });
     separators.globalAlpha = 1;
     context.globalAlpha = 1;
-    if (this.viewport.panelCount("events") > 1) {
-      separators.strokeStyle = palette.outline;
-      separators.lineWidth = 2;
-      separators.beginPath();
-      separators.moveTo(offset + panelWidth, 0);
-      separators.lineTo(offset + panelWidth, height);
-      separators.stroke();
-      separators.lineWidth = 1;
-    }
   }
   context.globalAlpha = 1;
   context.lineWidth = 1;

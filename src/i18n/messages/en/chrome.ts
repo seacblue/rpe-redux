@@ -245,6 +245,8 @@ export default {
   "chrome.toolbar.divisionHint": "Grid lines per beat",
   "chrome.toolbar.gridCount": "X-axis grid",
   "chrome.toolbar.gridCountHint": "Selectable note X lines",
+  "chrome.toolbar.gridCountSnap": "Toggle horizontal grid",
+  "chrome.toolbar.divisionSnap": "Toggle vertical grid",
 
   "chrome.toolbar.ratio": "Preview ratio",
   "chrome.toolbar.scrollbar": "Toolbar scroll position",

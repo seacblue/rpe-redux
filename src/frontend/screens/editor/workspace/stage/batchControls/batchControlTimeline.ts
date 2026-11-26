@@ -31,6 +31,7 @@ export type BatchTimeline = Pick<
     | "factorForLine"
     | "noteInset"
     | "snapX"
+    | "snapY"
     | "gridCount"
     | "lineIndexAt"
   >;

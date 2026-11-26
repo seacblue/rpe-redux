@@ -13,7 +13,6 @@ import {
   FOREGROUND_GRID,
   PLAYHEAD_GRID,
   gridBatchKey,
-  strokeVerticalGrid,
 } from "../drawing/gridDrawing.ts";
 import {
   noteColor,
@@ -403,25 +402,6 @@ export function draw(this: TimelineNoteDrawingReceiver, playBeat: number): void 
     }
   }
   drawNoteLanes(this, backdrop.context, width, height);
-  if (multiplePanels) {
-    const panelWidth = this.viewport.panelWidth(width, "notes");
-    const offset = this.viewport.multiLineViewportOffset(width, "notes");
-    backdrop.context.save();
-    backdrop.context.strokeStyle = palette.outline;
-    backdrop.context.lineWidth = 2;
-    const panelCount = this.viewport.panelCount("notes");
-    const [firstPanel, lastPanel] = this.viewport.visiblePanelRange(width, "notes");
-    const firstSeparator = Math.max(0, firstPanel - 1);
-    const lastSeparator = Math.min(panelCount - 2, lastPanel);
-    for (let panel = firstSeparator; panel <= lastSeparator; panel++) {
-      const separator = panel * this.viewport.panelStride(width, "notes") + panelWidth - offset;
-      const lineIndex = session.targetLineIndices[panel];
-      if (lineIndex !== undefined) {
-        strokeVerticalGrid(backdrop.context, separator, height);
-      }
-    }
-    backdrop.context.restore();
-  }
   if (this.getSession().multiLineActive && this.getSession().multiLineMode === "notes") {
     this.drawMultiLineNotes(context, width, height);
   }

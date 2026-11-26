@@ -148,7 +148,7 @@ const HOTKEY_TARGETS: Readonly<Record<string, string>> = Object.freeze({
   ShowLineInfo: "view.showLineInfo",
   Switch: "navigation.line.next",
   SwitchLine: "navigation.line.jump",
-  TimeAttach: "timeline.toggleSnapX",
+  TimeAttach: "timeline.toggleSnapY",
   SwitchMulti: "workspace.multiLine.toggle",
   SwitchMultiMode: "workspace.multiLine.switchMode",
   CurveBegin: "event.trajectory.capture.begin",
