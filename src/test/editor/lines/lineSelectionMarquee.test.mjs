@@ -6,6 +6,7 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
+  resolveMarqueeFirstLine,
 } from "../../../frontend/screens/editor/toolbar/lineSelectionMarquee.ts";
 
 /** Ascending array so set assertions stay readable. */
@@ -121,4 +122,11 @@ test("the marquee follows the pointer on both axes without snapping", () => {
     width: 1,
     height: 1,
   });
+});
+
+test("a marquee records its first line separately from its pressed anchor", () => {
+  assert.equal(resolveMarqueeFirstLine(-1, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
+  assert.equal(resolveMarqueeFirstLine(6, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 6), 1);
+  assert.equal(resolveMarqueeFirstLine(4, [4, 5], 6), 4);
+  assert.equal(resolveMarqueeFirstLine(-1, [], 6), 6);
 });
