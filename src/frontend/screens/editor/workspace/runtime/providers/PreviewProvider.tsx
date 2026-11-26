@@ -17,10 +17,6 @@ import { values } from "../../../../../../core/state/values.ts";
 import { displayValues } from "../../../../settings/editorDisplaySettings.ts";
 import { readCustomBackground } from "../../../../../platform/desktop/customBackground.ts";
 import { t } from "../../../../../../i18n/index.ts";
-import {
-  collaborationPendingAssets,
-  collaborationRoomDocument,
-} from "../../../../../../core/collaboration/ui.ts";
 import { readEditorDisplaySettings } from "../../../../settings/editorDisplaySettings.ts";
 import {
   getEditorRegionSnapshot,
@@ -82,8 +78,6 @@ export function createPreviewRuntime(options: {
   ui: EditorUiState;
   invalidate: () => void;
   notify(content: string | ToastContent, severity?: string, duration?: number): void;
-  /** Opens the asset drawer so a missing file can be added or relinked. */
-  openAssets(): void;
   atHome(): boolean;
   offsetSeconds(): number;
   tempo(): TempoMap;
@@ -261,34 +255,11 @@ export function createPreviewRuntime(options: {
       options.invalidate();
     },
     (issue: MediaIssue) => {
-      if (issue.kind !== "missing") {
+      if (issue.kind === "decode") {
         options.notify(issue.message, "warning");
-        return;
       }
-      // A room asset that is still downloading is not a missing file. The
-      // download path reloads the image when its bytes arrive. Room charts stay
-      // quiet even before the manifest arrives; required audio and background
-      // images are checked before the host creates the room.
-      if (
-        collaborationRoomDocument.get() ||
-        collaborationPendingAssets.get().includes(issue.name)
-      ) {
-        return;
-      }
-      options.notify({
-        message: issue.message,
-        level: "warning",
-        // Repeated loads of the same chart merge into this row instead of
-        // stacking, and the row keeps its first lifetime.
-        key: `media-missing:${issue.name}`,
-        actions: [
-          {
-            label: t("system.image.missingAction"),
-            dismissOnSelect: true,
-            onSelect: () => options.openAssets(),
-          },
-        ],
-      });
+      // Missing chart media is already surfaced as a fatal resource issue in
+      // the inspector. Keep the loading path quiet instead of duplicating it.
     },
     missingImageUrl,
   );

@@ -10,7 +10,6 @@ import { createChart, type Chart } from "../../../../../../core/global/chart/cha
 import { createStarterChart } from "../../../../../../core/global/chart/starterChart.ts";
 import {
   bumpCollaborationAssetRevision,
-  collaborationPendingAssets,
   collaborationRoomDocument,
 } from "../../../../../../core/collaboration/ui.ts";
 import type { AssetMap, EditorCandidate } from "../../../../../../core/global/document/types.ts";
@@ -441,12 +440,9 @@ export function createDocumentRuntime(options: {
     resolveDesktopSong: (song, assets, name) =>
       options.documents?.assets?.url(assetPath(assets, song, name) ?? song),
     loadMusic,
-    missingMusic: (name) => {
-      if (collaborationRoomDocument.get() || collaborationPendingAssets.get().includes(name)) {
-        return;
-      }
-      options.notify(t("editor.app.status.musicMissing", { name }), "warning");
-    },
+    // Missing chart media is published as a fatal resource issue by the
+    // inspector. Do not duplicate it in the transient notice host.
+    missingMusic: () => undefined,
     selectLine: (index) => getSession().selectLine(index),
     invalidate: options.invalidate,
     waitForFirstRender: options.waitForFirstRender,

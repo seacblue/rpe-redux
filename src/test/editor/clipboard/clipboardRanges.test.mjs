@@ -109,7 +109,7 @@ test("history travel reveals the successful entry range only", () => {
   ]);
 });
 
-test("history travel resolves dynamic operation labels before notifying", () => {
+test("history travel keeps undo silent and resolves dynamic redo labels", () => {
   setLanguage("zh");
   const session = new EditorSession(chartWith([], []));
   applyChartTransaction(session, {
@@ -124,7 +124,9 @@ test("history travel resolves dynamic operation labels before notifying", () => 
   });
 
   travel.travel("undo");
+  assert.deepEqual(messages, []);
+  travel.travel("redo");
 
-  assert.equal(messages.at(-1), "已撤销：By，增减");
+  assert.equal(messages.at(-1), "已重做：By，增减");
   setLanguage("en");
 });
