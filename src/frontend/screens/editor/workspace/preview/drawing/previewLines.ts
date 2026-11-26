@@ -237,18 +237,21 @@ function previewNoteScreenGeometry(
   sine: number,
 ): PreviewNoteScreenGeometry {
   const horizontal = position.x * scaleX;
-  const worldX = state.x + position.x * cosine + position.y * sine;
-  const worldY = -state.y + position.x * sine - position.y * cosine;
-  const headX = centerX + worldX * scaleX;
-  const headY = centerY + worldY * scaleY;
+  // Apply the viewport mapping in the line's local axes before rotating. The
+  // judge line is painted with that same local transform; scaling the rotated
+  // coordinates instead (`S * R`) moves a note off a tilted line whenever the
+  // frame is not square to the 1350×900 authoring box.
+  const localX = position.x * scaleX;
+  const localY = position.y * scaleY;
+  const headX = centerX + state.x * scaleX + localX * cosine + localY * sine;
+  const headY = centerY - state.y * scaleY + localX * sine - localY * cosine;
   const tail = Number.isFinite(position.tail) ? position.tail : position.y;
-  const tailWorldX = state.x + position.x * cosine + tail * sine;
-  const tailWorldY = -state.y + position.x * sine - tail * cosine;
+  const tailLocalY = tail * scaleY;
   target.horizontal = horizontal;
   target.headX = headX;
   target.headY = headY;
-  target.tailX = centerX + tailWorldX * scaleX;
-  target.tailY = centerY + tailWorldY * scaleY;
+  target.tailX = centerX + state.x * scaleX + localX * cosine + tailLocalY * sine;
+  target.tailY = centerY - state.y * scaleY + localX * sine - tailLocalY * cosine;
   return target;
 }
 
