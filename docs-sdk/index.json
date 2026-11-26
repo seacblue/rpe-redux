@@ -38,121 +38,121 @@
     },
     {
       "title": "基础用法",
-      "pages": [
+      "groups": [
         {
-          "slug": "ui-reference",
-          "title": "声明式 UI",
-          "file": "zh/ui-reference.md",
-          "keywords": ["声明式树", "标签", "属性", "事件", "节点上限", "sandbox", "input type"],
-          "order": 30
+          "title": "界面与视觉",
+          "pages": [
+            {
+              "slug": "ui-reference",
+              "title": "声明式 UI",
+              "file": "zh/ui-reference.md",
+              "keywords": ["声明式树", "标签", "属性", "事件", "节点上限", "sandbox", "input type"],
+              "order": 30
+            },
+            {
+              "slug": "panels-and-menus",
+              "title": "面板与菜单",
+              "file": "zh/panels-and-menus.md",
+              "keywords": [
+                "panel",
+                "sidebar",
+                "toolbar",
+                "contextMenu",
+                "overlay",
+                "open",
+                "close"
+              ],
+              "order": 40
+            },
+            {
+              "slug": "design-system",
+              "title": "设计系统",
+              "file": "zh/design-system.md",
+              "keywords": [
+                "设计 token",
+                "颜色",
+                "圆角",
+                "间距",
+                "字号",
+                "阴影",
+                "按钮",
+                "输入",
+                "开关",
+                "滑杆",
+                "图标"
+              ],
+              "order": 45
+            }
+          ]
         },
         {
-          "slug": "panels-and-menus",
-          "title": "面板与菜单",
-          "file": "zh/panels-and-menus.md",
-          "keywords": ["panel", "sidebar", "toolbar", "contextMenu", "overlay", "open", "close"],
-          "order": 40
-        },
-        {
-          "slug": "persistence",
-          "title": "数据持久化",
-          "file": "zh/persistence.md",
-          "keywords": ["storage", "设置", "settings", "values", "迁移", "版本", "JSON", "library"],
-          "order": 50
-        },
-        {
-          "slug": "security",
-          "title": "安全模型",
-          "file": "zh/security.md",
-          "keywords": ["沙箱", "安全", "信任", "预算", "样式作用域", "供应链"],
-          "order": 60
-        },
-        {
-          "slug": "api-reference",
-          "title": "API 约定",
-          "file": "zh/api-reference.md",
-          "keywords": ["API", "AsyncApi", "ApiResult", "methodNotRegistered", "capabilityDenied"],
-          "order": 65
-        },
-        {
-          "slug": "context",
-          "title": "扩展上下文",
-          "file": "zh/context.md",
-          "keywords": [
-            "context",
-            "ui",
-            "scripts",
-            "storage",
-            "values",
-            "timers",
-            "styles",
-            "events"
-          ],
-          "order": 66
-        },
-        {
-          "slug": "hooks",
-          "title": "公开 Hooks",
-          "file": "zh/hooks.md",
-          "keywords": ["hooks", "register", "invoke", "schema", "跨扩展"],
-          "order": 66.5
-        },
-        {
-          "slug": "types",
-          "title": "类型与术语",
-          "file": "zh/types.md",
-          "keywords": [
-            "ChartTransactionRequest",
-            "ChartObjectId",
-            "ApiResult",
-            "ActionResult",
-            "类型",
-            "术语"
-          ],
-          "order": 67
+          "title": "运行时与数据",
+          "pages": [
+            {
+              "slug": "persistence",
+              "title": "数据持久化",
+              "file": "zh/persistence.md",
+              "keywords": [
+                "storage",
+                "设置",
+                "settings",
+                "values",
+                "迁移",
+                "版本",
+                "JSON",
+                "library"
+              ],
+              "order": 50
+            },
+            {
+              "slug": "capabilities",
+              "title": "能力与授权",
+              "file": "zh/capabilities.md",
+              "keywords": ["capability", "能力", "授权", "consent", "风险", "host.patch"],
+              "order": 55
+            },
+            {
+              "slug": "context",
+              "title": "扩展上下文",
+              "file": "zh/context.md",
+              "keywords": [
+                "context",
+                "ui",
+                "scripts",
+                "storage",
+                "values",
+                "timers",
+                "styles",
+                "events"
+              ],
+              "order": 66
+            },
+            {
+              "slug": "hooks",
+              "title": "公开 Hooks",
+              "file": "zh/hooks.md",
+              "keywords": ["hooks", "register", "invoke", "schema", "跨扩展"],
+              "order": 66.5
+            },
+            {
+              "slug": "types",
+              "title": "类型与术语",
+              "file": "zh/types.md",
+              "keywords": [
+                "ChartTransactionRequest",
+                "ChartObjectId",
+                "ApiResult",
+                "ActionResult",
+                "类型",
+                "术语"
+              ],
+              "order": 67
+            }
+          ]
         }
       ]
     },
-    {
-      "title": "API",
-      "pages": []
-    },
-    {
-      "title": "枚举",
-      "pages": [
-        {
-          "slug": "capabilities",
-          "title": "能力清单",
-          "file": "zh/capabilities.md",
-          "keywords": ["capability", "能力", "授权", "consent", "风险", "host.patch"],
-          "order": 70
-        }
-      ]
-    },
-    {
-      "title": "设计系统",
-      "pages": [
-        {
-          "slug": "design-system",
-          "title": "设计系统",
-          "file": "zh/design-system.md",
-          "keywords": [
-            "设计 token",
-            "颜色",
-            "圆角",
-            "间距",
-            "字号",
-            "阴影",
-            "按钮",
-            "输入",
-            "开关",
-            "滑杆",
-            "图标"
-          ],
-          "order": 80
-        }
-      ]
-    },
+    { "title": "API", "pages": [] },
     {
       "title": "场景示例",
       "pages": [

@@ -23,6 +23,8 @@ export interface OffscreenPreviewSurface {
   readonly primary: HTMLCanvasElement;
   readonly notes: HTMLCanvasElement;
   readonly shader: HTMLCanvasElement;
+  readonly mask: HTMLCanvasElement;
+  readonly noteFieldMask: HTMLCanvasElement;
   readonly overlay: HTMLCanvasElement;
   readonly output: HTMLCanvasElement;
 }
@@ -82,6 +84,8 @@ export class OffscreenPreviewRenderer {
     const preview = new Preview(surface.primary, {
       noteBatch: surface.notes,
       shader: surface.shader,
+      mask: surface.mask,
+      noteFieldMask: surface.noteFieldMask,
       overlay: surface.overlay,
       display,
     });

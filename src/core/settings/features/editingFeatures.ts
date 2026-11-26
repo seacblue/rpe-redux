@@ -10,6 +10,8 @@
  * part of the standard line model and have no switch of their own.
  */
 import { declarePersistedValue, settingsRegistry } from "../settings.ts";
+import { values } from "../../state/values.ts";
+import { workspaceShaderPasses } from "../../global/chart/shader/workspacePasses.ts";
 import type { SettingDefinition, SettingsNavigation } from "../types.ts";
 import {
   EDITING_FEATURE_AI_KEYS,
@@ -26,7 +28,29 @@ const EditingFeaturesNavigation: SettingsNavigation = {
   order: 60,
 };
 
+/** Persisted choice for preserving or lowering workspace shader layers. */
+export const WORKSPACE_SHADER_EXPORT_MODE_KEY = "workspace-shader-export-mode";
+
 const EditingFeaturesSchema: SettingDefinition[] = [
+  {
+    key: WORKSPACE_SHADER_EXPORT_MODE_KEY,
+    navigation: "editor.features",
+    group: "settings.group.editingShaderFeatures",
+    label: "settings.field.workspace-shader-export-mode.label",
+    description: "settings.field.workspace-shader-export-mode.description",
+    control: "select",
+    default: "layered",
+    options: [
+      {
+        value: "layered",
+        label: "settings.option.workspace-shader-export-mode.layered",
+      },
+      {
+        value: "standalone",
+        label: "settings.option.workspace-shader-export-mode.standalone",
+      },
+    ],
+  },
   {
     key: EDITING_FEATURE_KEYS.noteSpeed,
     navigation: "editor.features",
@@ -169,6 +193,15 @@ const EditingFeaturesSchema: SettingDefinition[] = [
 
 settingsRegistry.registerNavigation(EditingFeaturesNavigation);
 settingsRegistry.registerSettings(EditingFeaturesSchema);
+
+// Keep the chart export seam independent from the settings UI: the registry
+// receives the current value once at startup and whenever the user changes it.
+const syncWorkspaceShaderExportMode = (): void => {
+  const mode = values.byId.get<string>(WORKSPACE_SHADER_EXPORT_MODE_KEY);
+  workspaceShaderPasses.setExportMode(mode === "standalone" ? "standalone" : "layered");
+};
+syncWorkspaceShaderExportMode();
+values.byId.subscribe(WORKSPACE_SHADER_EXPORT_MODE_KEY, syncWorkspaceShaderExportMode);
 
 // The AI switch is drawn by the human row, so its value is declared without a
 // definition. An undefined initial value keeps the stored preference absent

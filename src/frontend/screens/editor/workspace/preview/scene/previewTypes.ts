@@ -24,6 +24,8 @@ export type PreviewSurfaceKind = "workspace-underlay" | "dedicated";
 export interface PreviewCanvasLayers {
   noteBatch?: HTMLCanvasElement;
   shader: HTMLCanvasElement;
+  mask?: HTMLCanvasElement;
+  noteFieldMask?: HTMLCanvasElement;
   overlay: HTMLCanvasElement;
   display?: PreviewDisplayAdapter;
 }

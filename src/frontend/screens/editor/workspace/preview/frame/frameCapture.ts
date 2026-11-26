@@ -78,6 +78,8 @@ function detachedSurface(width: number, height: number): OffscreenPreviewSurface
     primary: detachedCanvas(width, height),
     notes: detachedCanvas(width, height),
     shader: detachedCanvas(width, height),
+    mask: detachedCanvas(width, height),
+    noteFieldMask: detachedCanvas(width, height),
     overlay: detachedCanvas(width, height),
     output: detachedCanvas(width, height),
   };

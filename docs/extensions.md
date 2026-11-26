@@ -111,7 +111,7 @@ A manifest declaration is a request. The runtime grants only these names, and ev
 | Preview geometry and layout | `preview.read` |
 | Host-only gate | `host.patch` (deprecated; grants nothing) |
 
-The vocabulary has 34 names, of which 33 are grantable. The consent catalog in `src/core/extensions/capabilityCatalog.ts` covers all 34, while `CAPABILITY_CONSENT_ROWS` omits `host.patch` because it never reaches an install dialog. `hitTest.read` grants temporal `queryAt`; geometric picking, preview geometry, and layout remain under `preview.read`.
+The vocabulary has 36 grantable names plus the deprecated `host.patch` compatibility name. The consent catalog in `src/core/extensions/capabilityCatalog.ts` covers all 37, while `CAPABILITY_CONSENT_ROWS` omits `host.patch` because it never reaches an install dialog. `hitTest.read` grants temporal `queryAt`; geometric picking, preview geometry, and layout remain under `preview.read`.
 
 Runtime-backed handles expose `availability()`; a missing capability or runtime is returned as an unavailable result or a `capabilityDenied` error. The sandbox has an opaque origin and cannot reach the host DOM, Tauri IPC, `window.redux`, network, workers, or child frames. Its only channel is a transferred `MessagePort`, and every result is plain cloned data.
 
@@ -458,11 +458,89 @@ A request may update chart `metadata`, replace the tempo map under `timing.bpmLi
 
 The public [Chart operations](../docs-sdk/en/place-note.md) guide walks through a complete plugin, selected-note updates, events, and result handling.
 
+### Persistent projections and workspace shaders
+
+Extensions that need a durable chart-side convention can request `chart.persistence`. A rule matches `chart`, `meta`, `judgeLine`, `note`, `event`, or any JSON object, then assigns or removes fields on the detached copy used by save, recovery, and export. It never mutates the live editor chart, and `enable`/`disable` controls each rule independently.
+
+```js
+const rule = await api.persistence.register({
+  id: "accent-taps",
+  label: "Accent tap notes",
+  kind: "note",
+  match: { type: 1 },
+  set: { reduxAccent: "gold" },
+  warning: {
+    code: "accent-taps.external-player",
+    message: "Accent metadata is Redux-specific.",
+  },
+});
+await api.persistence.disable("accent-taps");
+await api.persistence.enable("accent-taps");
+```
+
+The export pipeline calls `persistence.inspect(chart, "export")` and merges its structured warnings with format-loss warnings before the user confirms an export. The rule is applied again to the actual artifact, so inspecting is side-effect free.
+
+To make an injected note property feel native, request `chart.note-fields` and register its control schema. The host writes the named property through the normal transaction path and automatically adds the field to the note inspector and batch editor; the package remains the owner of the property meaning.
+
+```js
+await api.noteFields.register({
+  id: "hand",
+  field: "hand",
+  label: "Hand",
+  kind: "select",
+  options: [
+    ["", "Unmarked"],
+    ["left", "Left hand"],
+    ["right", "Right hand"],
+  ],
+  clearValue: "",
+});
+```
+
+Extensions that need a full-screen render stage can request `workspace.shader` and register a GLSL pass. `position` is `before-chart` or `after-chart`, `order` is deterministic within that stage, and `exportPolicy: "embed"` writes the source and uniform defaults to `META.ReduxWorkspaceShaderPasses`; `warn` leaves the pass runtime-only and warns that external players may ignore it; `ignore` omits both.
+
+Passes that affect chart objects can select the shared PhiZone-style hierarchy instead of guessing from output colours. Set `mask.layers` to one or more semantic ids such as `chart.note.hold`, `chart.note.drag`, `chart.note.tap`, and `chart.note.flick`; the renderer builds one RGBA note-layer atlas and exposes `rpeLayerMask(uv)` to the GLSL source. A package can also register a native note field with `api.noteFields.register`, then select its authored value with `mask: { kind: "note-field", field: "yourField", value: "yourValue", channel: 0 }`; the renderer exposes that atlas through `rpeNoteFieldMask(uv)`. The field name is not known to the editor, so the same seam works for hand markers, lane groups, or another package-defined property. The current layer adapter covers the four note layers and the field adapter covers contributed note shapes. The remaining stable ids (`chart.judge-line`, `chart.hit-effect`, and the `hud.*` layers) are reserved for their corresponding renderer adapters, so adding a new object type does not require a new public mask method.
+
+Advanced editing exposes two export modes. Layered is the lossless Redux/PhiZone contract: it preserves semantic masks and ordered passes. Standalone selects `portable.source` for each embedded pass and removes the built-in mask dependency; a pass without that fallback is omitted with an export warning, and an approximate fallback is warned about. This is the honest portability boundary: a player that only receives the final screen texture cannot reconstruct arbitrary object identity, so only a plugin-declared fallback can preserve the intended effect.
+
+```js
+await api.shader.register({
+  id: "note-outline",
+  label: "Note outline",
+  source: `uniform sampler2D screenTexture;
+uniform vec4 outlineColor;
+void main() {
+  vec4 base = texture2D(screenTexture, uv);
+  float note = rpeLayerMask(uv);
+  gl_FragColor = mix(base, outlineColor, note * outlineColor.a);
+}`,
+  values: { outlineColor: [50, 135, 255, 0.35] },
+  mask: { layers: ["chart.note.tap", "chart.note.flick"] },
+  portable: { source: "...same effect without rpeLayerMask or rpeNoteFieldMask..." },
+  position: "after-chart",
+  exportPolicy: "embed",
+});
+```
+
+```js
+await api.shader.register({
+  id: "soft-vignette",
+  label: "Soft vignette",
+  source:
+    "precision mediump float; uniform sampler2D u_texture; varying vec2 v_texCoord; void main(){ vec2 p=v_texCoord-.5; float v=1.-dot(p,p)*.8; gl_FragColor=texture2D(u_texture,v_texCoord)*v; }",
+  values: {},
+  position: "after-chart",
+  exportPolicy: "embed",
+});
+```
+
+Both registries are owner-scoped and are cleared when the Extension is disabled or unloaded. Shader passes are composed into live and offscreen preview rendering; export warning metadata makes their portability boundary explicit.
+
 ## Trust
 
 `author`, `license`, and provenance URLs are metadata. Trust is host-computed from the package bytes and a user confirmation bound to the current fingerprint. The states are `builtin`, `local-trusted`, `external-pending`, and `blocked`; consent is `none`, `current`, or `stale`. Changed bytes require confirmation again.
 
-Only a package whose id, version, manifest, translations, and entry bytes match the canonical digest of the shipped package is marked built-in. An unverified package cannot claim a `builtin.*` id, and a portable package never shadows a shipped root. Built-in entries use a deferred loader and are not evaluated until enabled. The first-launch default set is `builtin.distribute-scale-stagger` and `builtin.mirror-notes`; a persisted enable or disable choice wins.
+Only a package whose id, version, manifest, translations, and entry bytes match the canonical digest of the shipped package is marked built-in. An unverified package cannot claim a `builtin.*` id, and a portable package never shadows a shipped root. Built-in entries use a deferred loader and are not evaluated until enabled. The first-launch default set includes `builtin.official`; a persisted enable or disable choice wins.
 
 Mutation hooks (`session:before-commit`, `chart:parse`, `chart:parsed`, `chart:validate`, `chart:serialize`, and document lifecycle hooks) are not available in the sandbox. Use an explicit transaction or the public document and chart APIs. Owner-scoped ids keep package resources separate: script-default shortcuts use `extension.<owner>.script.*`, while explicit shortcut, toolbar, and value registrations use `extension.<owner>.*`; a package may write only its own declared values. Legacy `mod.<owner>.script.*` bindings are migrated once.
 

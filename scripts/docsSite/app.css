@@ -230,8 +230,9 @@ input {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 124px;
   min-height: 38px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--docs-border);
   border-radius: 9px;
   background: var(--docs-panel-soft);
@@ -239,6 +240,7 @@ input {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
+  justify-content: space-between;
   cursor: pointer;
 }
 
@@ -253,10 +255,12 @@ input {
 }
 
 .docs-locale-chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
   color: var(--docs-muted);
-  font-size: 16px;
-  line-height: 1;
-  transform: translateY(-1px);
+  transform: rotate(45deg) translate(-2px, -2px);
 }
 
 .docs-locale-menu {
@@ -265,12 +269,16 @@ input {
   right: 0;
   z-index: 70;
   display: grid;
-  min-width: 150px;
+  min-width: 180px;
   padding: 5px;
   border: 1px solid var(--docs-border);
   border-radius: 10px;
   background: var(--docs-panel);
   box-shadow: var(--docs-shadow);
+}
+
+.docs-locale-menu[hidden] {
+  display: none;
 }
 
 .docs-locale-option {
@@ -294,13 +302,6 @@ input {
 .docs-locale-option[aria-selected="true"] {
   background: var(--docs-accent-soft);
   color: var(--docs-accent);
-}
-
-.docs-locale-option-code {
-  color: var(--docs-muted);
-  font-family: var(--docs-mono);
-  font-size: 11px;
-  text-transform: uppercase;
 }
 
 .docs-search kbd {

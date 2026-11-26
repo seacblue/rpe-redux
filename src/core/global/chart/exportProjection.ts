@@ -27,6 +27,7 @@ import {
 } from "./chart.ts";
 import { CONTROL_TRACKS, type ControlTrackField } from "./chartTracks.ts";
 import { projectNoiseLinesForExport } from "./noise/noiseLine.ts";
+import { prepareChartForPersistence, type PersistenceWarning } from "./persistence.ts";
 
 /** Range for the 16-digit numeric package ids native RPE uses. */
 const PACKAGE_ID_MODULUS = 10_000_000_000_000_000n;
@@ -354,7 +355,7 @@ function withLayerDefaults(
  * The working document is never mutated. `chartName` only seeds a generated id
  * and is not stored; a chart that already carries `META.id` keeps it.
  */
-export function projectChartForExport(chart: Chart, chartName = ""): Chart {
+function projectChartForExportCore(chart: Chart, chartName = ""): Chart {
   const projected = projectNoiseLinesForExport(chart);
   const declared = projected.META.RPEVersion;
   const defaults: ExportDefaults = {};
@@ -433,6 +434,23 @@ export function projectChartForExport(chart: Chart, chartName = ""): Chart {
     judgeLineGroup,
     judgeLineList: lines,
   };
+}
+
+/** Project a chart and preserve warnings from Extension-owned output rules. */
+export function projectChartForExportWithWarnings(
+  chart: Chart,
+  chartName = "",
+): { readonly chart: Chart; readonly warnings: readonly PersistenceWarning[] } {
+  const prepared = prepareChartForPersistence(chart, "export");
+  return {
+    chart: projectChartForExportCore(prepared.chart, chartName),
+    warnings: prepared.warnings,
+  };
+}
+
+/** Project a chart for a native file without exposing the warning report. */
+export function projectChartForExport(chart: Chart, chartName = ""): Chart {
+  return projectChartForExportWithWarnings(chart, chartName).chart;
 }
 
 /** Serialize the chart exactly as a JSON document or PEZ package should contain it. */

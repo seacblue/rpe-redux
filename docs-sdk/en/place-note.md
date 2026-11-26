@@ -2,7 +2,7 @@
 
 A chart write is a **transaction**. Read the current chart, build one request, then submit it through `context.api.transaction`. The host validates the request, applies it once, and records it in undo history.
 
-This page is a task guide. For the full result envelope and error model, read [API conventions](api-reference.md); for every method, use the generated API tree.
+This page is a task guide. Each generated method page contains its result envelope and error model; use the API tree for the exact signature.
 
 ## Manifest
 

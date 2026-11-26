@@ -27,11 +27,26 @@ import type { TrustedExtensionContext, TrustedExtensionDefinition } from "@rpe-r
 
 `sdk/examples/` contains a TypeScript package, a JSDoc JavaScript package, a data-only package, a code-cell example, and `composition.ts`, which type-checks provider/consumer, hook, and design-slot composition against the same public surface. A package registers as many scripts as it needs; data-only packages list them under `scripts` in the manifest.
 
+## First complete package
+
+For a package that adds a native note field or uses a shader, start with the [getting started guide](../docs-sdk/en/getting-started.md) and then open the generated `noteFields`, `shader`, and `persistence` API pages. The host-level reference in [`docs/extensions.md`](../docs/extensions.md) covers their combined rendering and export contract. The shorter notice-only path is still the right first package to build.
+
+The authoring path is intentionally linear:
+
+1. Put package identity and requested capabilities in `manifest.json`.
+2. Export one `activate(context)` entry from `index.js`.
+3. Register each contribution directly on its handle, such as `context.api.noteFields.register(definition)` or `context.api.shader.register(definition)`.
+4. Edit the contributed field in the native inspector or batch editor, then verify the preview and export warning in the application.
+
+Do not invent an extra `api`, `field`, or `shader` wrapper around a definition. The few nested objects in the public shapes have a specific boundary: transaction operations are grouped by chart object kind so one request stays atomic; `mask` is a union of semantic-layer and note-field selectors; `portable` is a separate fallback for standalone export; and translation references are `{ key, params? }` so the host can localize them at render time. A one-field contribution remains a flat definition.
+
 ## Chart operations
 
 Chart writes are one atomic `context.api.transaction` request. Read with `context.api.chart` or `context.api.selection`, then call `transaction.preview` or `transaction.apply`. The current contract has no `chart.placeNote` and no direct mutation of chart snapshots. The task guide with a complete note-insert plugin, selected-note updates, events, and result handling is [`docs-sdk/en/place-note.md`](../docs-sdk/en/place-note.md) (Chinese: [`docs-sdk/zh/place-note.md`](../docs-sdk/zh/place-note.md)).
 
 `context.api.chart.beats` provides exact beat arithmetic for Extensions. Use `add` and `subtract` for two reduced triples, or `addFraction` for a numerator/denominator increment. The asynchronous methods return `ApiResult<Beat>` and require `chart.read`; they preserve exact triples instead of passing through floating-point `Number` values.
+
+Packages that need durable conventions may request `chart.persistence` and project fields onto detached save, recovery, and export copies. Packages that need native note properties may request `chart.note-fields` and register a field schema with `api.noteFields.register`; the field then appears in the native note inspector and batch editor, while arbitrary values remain lossless through chart transactions. Packages that need a workspace-wide render stage may request `workspace.shader` and register ordered GLSL passes; embedded passes are written to `META.ReduxWorkspaceShaderPasses`, while runtime-only passes produce export warnings according to their policy. Advanced editing offers layered export (preserve semantic masks) and standalone export (use a pass's `portable.source` fallback). The generated `noteFields`, `shader`, and `persistence` API pages provide the public method details; the host-level combined contract remains in [`docs/extensions.md`](../docs/extensions.md). Shader passes that target chart objects use the shared semantic render hierarchy through `mask.layers`, or a contributed note field through `mask.kind: "note-field"`; the renderer exposes them through `rpeLayerMask(uv)` and `rpeNoteFieldMask(uv)` without hard-coding package fields.
 
 ## Themes and note skins
 

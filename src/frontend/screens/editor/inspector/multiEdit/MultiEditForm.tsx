@@ -5,7 +5,7 @@
  * element is created outside this component's tree. Field state and validation
  * messages stay local to the form.
  */
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
@@ -22,9 +22,10 @@ import { EVENT_TRACKS } from "../../../../../core/global/chart/chartVocabulary.t
 import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   BATCH_OPERATIONS,
-  NOTE_BATCH_FIELDS,
+  noteBatchFields,
   EVENT_BATCH_FIELDS,
 } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
+import { noteFields } from "../../../../../core/global/chart/noteFields.ts";
 import {
   defaultBatchParameters,
   type BatchParameters,
@@ -177,6 +178,11 @@ export function MultiEditForm({
   onHistory,
   onApply,
 }: MultiEditFormProps) {
+  const noteFieldRevision = useSyncExternalStore(
+    noteFields.subscribe.bind(noteFields),
+    noteFields.getRevision.bind(noteFields),
+    noteFields.getRevision.bind(noteFields),
+  );
   const linkgroupEnabled = useEditingFeature("linkgroup");
   const noteSpeedEnabled = useEditingFeature("noteSpeed");
   const noteSizeEnabled = useEditingFeature("noteSize");
@@ -218,6 +224,16 @@ export function MultiEditForm({
         } as MultiEditFormValues;
         if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === value.field)) {
           value.field = "both";
+        }
+        const loadedNoteField = kind === "notes" ? noteFields.findByField(value.field) : null;
+        if (loadedNoteField) {
+          value.operation = "To";
+          if (
+            loadedNoteField.kind === "select" &&
+            !loadedNoteField.options?.some(([option]) => option === value.lower)
+          ) {
+            value.lower = "";
+          }
         }
         if (noiseActivation && !["t1", "t2"].includes(value.field)) {
           value.field = "t1";
@@ -261,18 +277,34 @@ export function MultiEditForm({
     blue: noteColorEnabled,
     hitSound: noteHitSoundEnabled,
   };
+  const contributedFields = useMemo(
+    () =>
+      noteFieldRevision >= 0
+        ? new Set(noteFields.list().map((field) => field.field))
+        : new Set<string>(),
+    [noteFieldRevision],
+  );
   const fields: readonly Option[] = (
     kind === "notes"
-      ? NOTE_BATCH_FIELDS.filter(([key]) => noteFieldsEnabled[key] ?? true)
+      ? noteBatchFields().filter(([key]) => noteFieldsEnabled[key] ?? contributedFields.has(key))
       : EVENT_BATCH_FIELDS.filter(([key]) =>
           noiseActivation ? ["t1", "t2"].includes(key) : key !== "linkgroup" || linkgroupEnabled,
         )
-  ).map(([key, label]) => [key, shortLabel(t(label))] as const);
+  ).map(
+    ([key, label]) =>
+      [key, shortLabel(contributedFields.has(key) ? label : t(label as MessageKey))] as const,
+  );
   const eventTypeOptions: readonly Option[] = MULTI_EDIT_EVENT_TYPES.map((type) => [
     type,
     eventTypeLabel(type),
   ]);
-  const operations = BATCH_OPERATIONS.map(([key, label]) => [key, shortLabel(t(label))] as const);
+  const selectedNoteField = kind === "notes" ? noteFields.findByField(values.field) : null;
+  const operations = (
+    selectedNoteField?.kind === "select"
+      ? BATCH_OPERATIONS.filter(([key]) => key === "To")
+      : BATCH_OPERATIONS
+  ).map(([key, label]) => [key, shortLabel(t(label))] as const);
+  const contributedField = selectedNoteField !== null;
   const beatBounds = kind === "events" && (values.field === "t1" || values.field === "t2");
   const historyIndex = Number(historySelection);
   const selectedHistoryIndex =
@@ -314,7 +346,10 @@ export function MultiEditForm({
           title={t("editorPanels.multiEdit.field")}
           value={values.field}
           options={fields}
-          onChange={(field) => update({ field })}
+          onChange={(field) => {
+            const noteField = kind === "notes" ? noteFields.findByField(field) : null;
+            update({ field, ...(noteField?.kind === "select" ? { operation: "To" } : {}) });
+          }}
         />
         <Field
           title={t("editorPanels.multiEdit.operation")}
@@ -323,32 +358,41 @@ export function MultiEditForm({
           onChange={(operation) => update({ operation })}
         />
         <Field
-          title={t("editorPanels.multiEdit.distribution.lower")}
+          title={
+            contributedField
+              ? (selectedNoteField?.label ?? t("editorPanels.multiEdit.distribution.lower"))
+              : t("editorPanels.multiEdit.distribution.lower")
+          }
           value={values.lower}
+          options={selectedNoteField?.kind === "select" ? selectedNoteField.options : undefined}
           beat={beatBounds ? batchBeat(values.lower) : undefined}
           onChange={(lower) => update({ lower })}
         />
-        <Field
-          title={t("editorPanels.multiEdit.distribution.upper")}
-          value={values.upper}
-          beat={beatBounds ? batchBeat(values.upper) : undefined}
-          onChange={(upper) => update({ upper })}
-        />
-        <EasingField
-          label={t("editorPanels.multiEdit.distribution.easingType")}
-          value={Number(values.easingType) || 1}
-          onChange={(easingType) => update({ easingType })}
-        />
-        <Field
-          title={t("editorPanels.multiEdit.distribution.cycle")}
-          value={values.cycle}
-          onChange={(cycle) => update({ cycle })}
-        />
-        <Field
-          title={t("editorPanels.multiEdit.distribution.disturbance")}
-          value={values.disturbance}
-          onChange={(disturbance) => update({ disturbance })}
-        />
+        {!contributedField && (
+          <>
+            <Field
+              title={t("editorPanels.multiEdit.distribution.upper")}
+              value={values.upper}
+              beat={beatBounds ? batchBeat(values.upper) : undefined}
+              onChange={(upper) => update({ upper })}
+            />
+            <EasingField
+              label={t("editorPanels.multiEdit.distribution.easingType")}
+              value={Number(values.easingType) || 1}
+              onChange={(easingType) => update({ easingType })}
+            />
+            <Field
+              title={t("editorPanels.multiEdit.distribution.cycle")}
+              value={values.cycle}
+              onChange={(cycle) => update({ cycle })}
+            />
+            <Field
+              title={t("editorPanels.multiEdit.distribution.disturbance")}
+              value={values.disturbance}
+              onChange={(disturbance) => update({ disturbance })}
+            />
+          </>
+        )}
         {multiEventEdit && (
           <Field
             title={t("editorPanels.multiEdit.applicationMode")}

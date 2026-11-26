@@ -6,6 +6,7 @@
 import { SceneRuntime } from "../../../../../../core/global/chart/runtime/scene.ts";
 import type { NoteChangeHint } from "../../../../../../core/global/chart/runtime/noteChangeHints.ts";
 import { ShaderRuntime } from "../../../../../../core/global/chart/shader/shader.ts";
+import { workspaceShaderPasses } from "../../../../../../core/global/chart/shader/workspacePasses.ts";
 import { SimultaneousNotesCache } from "../../../../../../core/global/chart/line/simultaneousNotes.ts";
 import {
   DEFAULT_PREVIEW_ASPECT_RATIO,
@@ -235,6 +236,10 @@ export class Preview {
   declare backgroundFrame: PreviewBackground;
   declare overlayCanvas: HTMLCanvasElement | null;
   declare shaderCanvas: HTMLCanvasElement | null;
+  declare shaderMaskCanvas: HTMLCanvasElement | null;
+  declare shaderNoteFieldMaskCanvas: HTMLCanvasElement | null;
+  shaderMaskContext: CanvasRenderingContext2D | null = null;
+  shaderNoteFieldMaskContext: CanvasRenderingContext2D | null = null;
   declare noteOpacity: number;
   declare visible: boolean;
   declare noteSize: number;
@@ -345,6 +350,7 @@ export class Preview {
   private shaderPrewarmChart: Chart | null = null;
   private shaderPrewarmRevision = -1;
   private shaderPrewarmContentRevision: number | undefined;
+  private shaderPrewarmWorkspaceRevision = -1;
   private readonly guideBuffer: NonNullable<Preview["guides"]> = [];
   /**
    * Monotonic identity for guide geometry changes consumed by the overlay cache.
@@ -388,6 +394,7 @@ export class Preview {
     this.lineBatchSkin = undefined;
     this.lineBatchRevision = undefined;
     this.lineBatchContentRevision = null;
+    this.shaderPrewarmWorkspaceRevision = -1;
     this.noteHitAreas.length = 0;
     this.selectedNotes = new Map();
     this.overlapHighlight = null;
@@ -515,6 +522,7 @@ export class Preview {
   private prewarmShaderPrograms(): void {
     const chart = this.chart;
     const revision = this.shaderRuntime.sourceRevision;
+    const workspaceRevision = workspaceShaderPasses.getRevision();
     if (!this.applyShaders || !chart || !this.shaderCanvas) {
       if (this.shaderPipeline.programs.size || this.shaderPrewarmChart !== null) {
         this.shaderPipeline.retainSources([]);
@@ -527,13 +535,15 @@ export class Preview {
     if (
       this.shaderPrewarmChart === chart &&
       this.shaderPrewarmRevision === revision &&
-      this.shaderPrewarmContentRevision === (this.lastDocumentRevision ?? undefined)
+      this.shaderPrewarmContentRevision === (this.lastDocumentRevision ?? undefined) &&
+      this.shaderPrewarmWorkspaceRevision === workspaceRevision
     ) {
       return;
     }
     this.shaderPrewarmChart = chart;
     this.shaderPrewarmRevision = revision;
     this.shaderPrewarmContentRevision = this.lastDocumentRevision ?? undefined;
+    this.shaderPrewarmWorkspaceRevision = workspaceRevision;
     const entries: ShaderProgramSource[] = [];
     const seen = new Set<string>();
     for (const effect of this.shaderRuntime.effects) {
@@ -543,6 +553,14 @@ export class Preview {
       }
       seen.add(source);
       entries.push({ name: effect.shader, source });
+    }
+    for (const pass of workspaceShaderPasses.active()) {
+      const source = workspaceShaderPasses.source(pass.shader);
+      if (!source || seen.has(source)) {
+        continue;
+      }
+      seen.add(source);
+      entries.push({ name: pass.shader, source });
     }
     this.shaderPipeline.retainSources(seen);
     if (
@@ -724,6 +742,8 @@ export class Preview {
   constructor(canvas: HTMLCanvasElement, layers: PreviewCanvasLayers | null = null) {
     this.canvas = canvas;
     this.shaderCanvas = layers?.shader ?? null;
+    this.shaderMaskCanvas = layers?.mask ?? null;
+    this.shaderNoteFieldMaskCanvas = layers?.noteFieldMask ?? null;
     this.scene = new SceneRuntime();
     this.simultaneousCache = new SimultaneousNotesCache();
     this.shaderRuntime = new ShaderRuntime(() => this.invalidate?.(), readShaderSource);
@@ -1207,7 +1227,8 @@ export class Preview {
     this.noteHitAreas.length = 0;
     this.lineFrames.length = 0;
     const notesStarted = performance.now();
-    if (this.sharedNoteBatch && this.applyShaders && frame.shaderEffects.length > 0) {
+    const hasShaderEffects = frame.shaderEffects.length > 0 || workspaceShaderPasses.hasEnabled();
+    if (this.sharedNoteBatch && this.applyShaders && hasShaderEffects) {
       this.shaderPipeline.prepareTarget(
         this.shaderCanvas,
         frame.width,
@@ -1233,7 +1254,11 @@ export class Preview {
     // instead of calling the skin. `null` means the batch is inactive, so no note is
     // submitted and an empty table is never read.
     this.noteTextures = this.noteBatch.prepareNoteTextures(this.skin ?? null) ?? EMPTY_TEXTURES;
+    this.shaderMaskContext = this.prepareShaderMask(frame);
+    this.shaderNoteFieldMaskContext = this.prepareShaderNoteFieldMask(frame);
     const drawStats = drawLinePasses(this, frame);
+    this.shaderMaskContext = null;
+    this.shaderNoteFieldMaskContext = null;
     if (nextRetainedLineKey !== null && !retainedLines && this.noteBatch.isActive()) {
       this.noteBatch.retainLineBatch();
       this.retainedLineBatchKey = this.noteBatch.isActive() ? nextRetainedLineKey : null;
@@ -1257,8 +1282,7 @@ export class Preview {
     this.hitEffectsActive = this.showHitEffects ? drawHitEffects(this, frame) : false;
     const effectsMs = performance.now() - effectsStarted;
     const compositeStarted = performance.now();
-    const shaderInputEligible =
-      this.sharedNoteBatch && this.applyShaders && frame.shaderEffects.length > 0;
+    const shaderInputEligible = this.sharedNoteBatch && this.applyShaders && hasShaderEffects;
     if (!shaderInputEligible) {
       // The ordinary path owns the note canvas and needs one final submission.
       // When shaders are active, defer this submission to finishToFramebuffer so
@@ -1287,7 +1311,7 @@ export class Preview {
       !this.noiseComposited &&
       !this.sharedNoteBatch &&
       this.applyShaders &&
-      frame.shaderEffects.length > 0 &&
+      hasShaderEffects &&
       this.noteBatch.isActive()
         ? this.noteBatchCanvas
         : null;
@@ -1302,6 +1326,44 @@ export class Preview {
       shaderSourceUploadMs: this.shaderPipeline.lastFrameMetrics.sourceUploadMs,
       shaderOverlayUploadMs: this.shaderPipeline.lastFrameMetrics.overlayUploadMs,
     };
+  }
+
+  /** Clear and prepare the semantic RGBA mask atlas for one frame. */
+  private prepareShaderMask(frame: PreviewFrame): CanvasRenderingContext2D | null {
+    const canvas = this.shaderMaskCanvas;
+    if (!canvas || !this.applyShaders || !workspaceShaderPasses.hasMask()) {
+      return null;
+    }
+    if (canvas.width !== frame.width || canvas.height !== frame.height) {
+      canvas.width = Math.max(1, Math.round(frame.width));
+      canvas.height = Math.max(1, Math.round(frame.height));
+    }
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    return context;
+  }
+
+  /** Clear and prepare the note-field mask atlas for one frame. */
+  private prepareShaderNoteFieldMask(frame: PreviewFrame): CanvasRenderingContext2D | null {
+    const canvas = this.shaderNoteFieldMaskCanvas;
+    if (!canvas || !this.applyShaders || !workspaceShaderPasses.hasMask()) {
+      return null;
+    }
+    if (canvas.width !== frame.width || canvas.height !== frame.height) {
+      canvas.width = Math.max(1, Math.round(frame.width));
+      canvas.height = Math.max(1, Math.round(frame.height));
+    }
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    return context;
   }
 
   /**

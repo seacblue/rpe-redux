@@ -123,6 +123,8 @@ export function createPreviewRuntime(options: {
   const previewLayers = {
     noteBatch: preview.noteBatch,
     shader: preview.shader,
+    mask: preview.mask,
+    noteFieldMask: preview.noteFieldMask,
     overlay: preview.overlay,
     display: createPreviewDisplay(
       {

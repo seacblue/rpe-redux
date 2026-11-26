@@ -583,6 +583,9 @@ const CAPABILITY_DESCRIPTIONS = Object.freeze({
   scripts: "注册并运行包内脚本（命令、快捷键和菜单动作）。",
   "chart.read": "读取谱面元数据、判定线、音符、事件和资源引用。",
   "chart.write": "通过事务写入谱面，不直接修改谱面对象。",
+  "chart.persistence": "在保存、恢复和导出副本上投影扩展字段（敏感）。",
+  "chart.note-fields": "向原生音符检查器和批量编辑器注册扩展字段。",
+  "workspace.shader": "向 Workspace 预览注册可排序的全局 Shader pass（敏感）。",
   "selection.read": "读取当前选中的音符和事件。",
   "selection.write": "修改选区（复制、剪切、删除、粘贴、范围选择）。",
   "document.read": "读取文档状态、快照和指纹。",
@@ -2519,7 +2522,17 @@ async function loadDocs({ locale = DEFAULT_LOCALE, localeCatalog } = {}) {
       throw new Error("docs-sdk/index.json has a section without a title");
     }
     const sectionTitle = localeConfig.sections?.[section.title] ?? section.title;
-    for (const page of section.pages ?? []) {
+    const indexedPages = [
+      ...(section.pages ?? []).map((page) => ({ page, group: "" })),
+      ...(section.groups ?? []).flatMap((group) => {
+        if (!group || typeof group.title !== "string" || !group.title.trim()) {
+          throw new Error(`Section ${section.title} has a group without a title`);
+        }
+        const groupTitle = localeConfig.groups?.[group.title] ?? group.title;
+        return (group.pages ?? []).map((page) => ({ page, group: groupTitle }));
+      }),
+    ];
+    for (const { page, group } of indexedPages) {
       if (!page || typeof page.slug !== "string" || !/^[a-z0-9][a-z0-9-]*$/u.test(page.slug)) {
         throw new Error(`docs-sdk/index.json has an invalid page slug: ${page?.slug}`);
       }
@@ -2553,9 +2566,10 @@ async function loadDocs({ locale = DEFAULT_LOCALE, localeCatalog } = {}) {
         title: localizedPage.title ?? page.title,
         file,
         route: page.slug,
-        breadcrumb: [sectionTitle, localizedPage.title ?? page.title],
+        breadcrumb: [sectionTitle, ...(group ? [group] : []), localizedPage.title ?? page.title],
         kind: "page",
         group: "",
+        navGroup: group,
         updated: DOCS_UPDATED,
         keywords: Array.isArray(localizedPage.keywords)
           ? localizedPage.keywords.map(String)
@@ -2750,6 +2764,12 @@ export async function buildDocsSite({ outDir = DEFAULT_OUT } = {}) {
       htmlLang: localeConfig.htmlLang,
       title: localeConfig.title,
       description: localeConfig.description,
+      localeLabels: Object.fromEntries(
+        Object.entries(localeCatalog.locales ?? {}).map(([id, config]) => [
+          id,
+          config.labels?.[locale] ?? config.label ?? id,
+        ]),
+      ),
       generatedAt: new Date().toISOString(),
       shell: localeConfig.shell,
       types: buildTypeCatalog(docs.pages),
@@ -2828,6 +2848,7 @@ function groupPages(pages) {
       breadcrumb: page.breadcrumb,
       kind: page.kind,
       group: page.group,
+      navGroup: page.navGroup ?? "",
       updated: page.updated,
       keywords: page.keywords,
       html: page.html,
@@ -2912,28 +2933,53 @@ function apiHandleNav(handlePage, pages) {
   };
 }
 
-/** Build the API section node: overview, handles, and collapsed member groups. */
+/** Build the API section node with handles directly below the API heading. */
 function apiSectionNav(section) {
   const pages = section.pages ?? [];
-  const apiIndex = pages.find((page) => page.kind === "api-index");
   const handles = pages
     .filter((page) => page.kind === "handle")
     .map((handlePage) => apiHandleNav(handlePage, pages));
-  const children = apiIndex
-    ? [
-        {
-          id: `page-${apiIndex.slug}`,
-          label: apiIndex.title,
-          route: apiIndex.route,
-          slug: apiIndex.slug,
-          kind: "api-index",
-          defaultExpanded: true,
-          children: handles,
-        },
-      ]
-    : handles;
   return {
     id: "section-API",
+    label: section.title,
+    route: null,
+    slug: "",
+    kind: "section",
+    defaultExpanded: true,
+    children: handles,
+  };
+}
+
+/** Build a regular section, optionally grouping pages beneath named subheadings. */
+function regularSectionNav(section) {
+  const groups = new Map();
+  for (const page of section.pages ?? []) {
+    const group = page.navGroup ?? "";
+    const pages = groups.get(group);
+    if (pages) {
+      pages.push(page);
+    } else {
+      groups.set(group, [page]);
+    }
+  }
+  const children = [];
+  for (const [group, pages] of groups) {
+    if (!group) {
+      children.push(...pages.map(navLeaf));
+      continue;
+    }
+    children.push({
+      id: `section-${section.title}-${group}`,
+      label: group,
+      route: null,
+      slug: "",
+      kind: "group",
+      defaultExpanded: true,
+      children: pages.map(navLeaf),
+    });
+  }
+  return {
+    id: `section-${section.title}`,
     label: section.title,
     route: null,
     slug: "",
@@ -2946,17 +2992,7 @@ function apiSectionNav(section) {
 /** Build the sidebar hierarchy from the grouped page list. */
 function buildNavTree(sections) {
   return (sections ?? []).map((section) =>
-    section.title === "API"
-      ? apiSectionNav(section)
-      : {
-          id: `section-${section.title}`,
-          label: section.title,
-          route: null,
-          slug: "",
-          kind: "section",
-          defaultExpanded: true,
-          children: (section.pages ?? []).map(navLeaf),
-        },
+    section.title === "API" ? apiSectionNav(section) : regularSectionNav(section),
   );
 }
 
@@ -3035,12 +3071,13 @@ async function validateOutput(target, pages, localePayloads = {}) {
     }
   };
   visitNav(content.nav, 0);
-  for (const page of flat) {
+  const navigablePages = flat.filter((page) => page.kind !== "api-index");
+  for (const page of navigablePages) {
     if (navRoutes.get(page.route) !== 1) {
       throw new Error(`content.json nav must reference ${page.route} exactly once`);
     }
   }
-  if (navRoutes.size !== flat.length) {
+  if (navRoutes.size !== navigablePages.length) {
     throw new Error("content.json nav references an unknown route");
   }
   const api = content.sections.find((section) => section.title === "API");

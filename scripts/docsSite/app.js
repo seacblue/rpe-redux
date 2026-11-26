@@ -58,11 +58,14 @@
     elements.toc?.setAttribute("aria-label", copy("toc"));
     elements.pager?.setAttribute("aria-label", copy("pager"));
     if (elements.localeToggle) {
-      const currentCode = state.locale.split("-")[0] || state.locale;
-      elements.localeCurrent.textContent = currentCode;
+      const currentLabel =
+        state.content?.localeLabels?.[state.locale] ??
+        state.catalog?.[state.locale]?.label ??
+        state.locale;
+      elements.localeCurrent.textContent = currentLabel;
       elements.localeToggle.setAttribute(
         "aria-label",
-        `${copy("languageMenu", copy("language", "Language"))}: ${currentCode}`,
+        `${copy("languageMenu", copy("language", "Language"))}: ${currentLabel}`,
       );
       renderLocaleMenu();
     }
@@ -75,6 +78,12 @@
     }
     elements.localeMenu.hidden = !open;
     elements.localeToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  /** Toggle the language menu from the button's authoritative ARIA state. */
+  function toggleLocaleMenu() {
+    const open = elements.localeToggle?.getAttribute("aria-expanded") === "true";
+    setLocaleMenuOpen(!open);
   }
 
   /** Render every locale as an explicit choice instead of cycling implicitly. */
@@ -91,11 +100,8 @@
       option.setAttribute("aria-selected", locale === state.locale ? "true" : "false");
       option.dataset.locale = locale;
       const label = document.createElement("span");
-      label.textContent = state.catalog?.[locale]?.label ?? locale;
-      const code = document.createElement("span");
-      code.className = "docs-locale-option-code";
-      code.textContent = locale.split("-")[0] || locale;
-      option.append(label, code);
+      label.textContent = state.content?.localeLabels?.[locale] ?? locale;
+      option.append(label);
       elements.localeMenu.append(option);
     }
   }
@@ -989,11 +995,19 @@
   function bindEvents() {
     elements.menuToggle.addEventListener("click", toggleMenu);
     elements.backdrop.addEventListener("click", closeMenu);
-    elements.localeToggle.addEventListener("click", (event) => {
+    elements.localeToggle.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
-      setLocaleMenuOpen(elements.localeMenu.hidden);
+    });
+    elements.localeToggle.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleLocaleMenu();
+    });
+    elements.localeMenu.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
     });
     elements.localeMenu.addEventListener("click", (event) => {
+      event.stopPropagation();
       const option =
         event.target instanceof Element ? event.target.closest("button[data-locale]") : null;
       if (option?.dataset.locale) {
@@ -1040,6 +1054,11 @@
         }
       }
       if (!(event.target instanceof Element) || !event.target.closest(".docs-locale-picker")) {
+        setLocaleMenuOpen(false);
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
         setLocaleMenuOpen(false);
       }
     });

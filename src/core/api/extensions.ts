@@ -76,4 +76,30 @@ export type {
   SandboxUiEvent,
   SandboxUiNode,
 } from "../extensions/sandbox.ts";
+export type {
+  PersistenceJson,
+  PersistenceMatch,
+  PersistenceObjectKind,
+  PersistenceOutput,
+  PersistenceProjection,
+  PersistenceRuleDefinition,
+  PersistenceRuleStatus,
+  PersistenceWarning,
+} from "./persistence.ts";
+export type {
+  WorkspaceShaderExportPolicy,
+  WorkspaceShaderMaskBinding,
+  WorkspaceShaderMaskDefinition,
+  WorkspaceShaderPortableDefinition,
+  WorkspaceShaderExportMode,
+  WorkspaceShaderPassDefinition,
+  WorkspaceShaderPassStatus,
+  WorkspaceShaderPosition,
+  WorkspaceShaderWarning,
+} from "./shader.ts";
+export type { NoteFieldDefinition, NoteFieldOption, NoteFieldStatus } from "./noteFields.ts";
+export type {
+  ChartRenderLayerDefinition,
+  ChartRenderLayerId,
+} from "../global/chart/shader/renderLayers.ts";
 export type { ExtensionScriptResult, ExtensionScriptSnapshot } from "../extensions/scripts.ts";

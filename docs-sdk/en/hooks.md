@@ -189,5 +189,4 @@ For package code, request `hooks` only for public hook cooperation and `events` 
 
 - [Extension context](context.md): where `api`, `events`, and `hooks` live.
 - [Capabilities](capabilities.md): authorization for `hooks` and `events`.
-- [API conventions](api-reference.md): async bridge, `ApiResult`, and error boundaries.
 - [Types and terminology](types.md): chart and selection shapes used by the SDK.

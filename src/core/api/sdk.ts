@@ -178,6 +178,32 @@ export type {
   TransactionHandle as TransactionApi,
 } from "./transaction.ts";
 export type { PublicValueDefinition, ValueHandle } from "./values.ts";
+export type {
+  PersistenceJson,
+  PersistenceMatch,
+  PersistenceObjectKind,
+  PersistenceOutput,
+  PersistenceProjection,
+  PersistenceRuleDefinition,
+  PersistenceRuleStatus,
+  PersistenceWarning,
+} from "./persistence.ts";
+export type {
+  WorkspaceShaderExportPolicy,
+  WorkspaceShaderMaskBinding,
+  WorkspaceShaderMaskDefinition,
+  WorkspaceShaderPortableDefinition,
+  WorkspaceShaderExportMode,
+  WorkspaceShaderPassDefinition,
+  WorkspaceShaderPassStatus,
+  WorkspaceShaderPosition,
+  WorkspaceShaderWarning,
+} from "./shader.ts";
+export type { NoteFieldDefinition, NoteFieldOption, NoteFieldStatus } from "./noteFields.ts";
+export type {
+  ChartRenderLayerDefinition,
+  ChartRenderLayerId,
+} from "../global/chart/shader/renderLayers.ts";
 
 /* Editor snapshots exposed by the preview and layout handles. */
 export type {

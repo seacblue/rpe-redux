@@ -79,6 +79,9 @@ import type {
 import type { ExtensionSandboxFactory, ExtensionSandboxHost } from "./sandbox.ts";
 import { clearRecipePlans } from "./recipePlans.ts";
 import { clearPlaybackSubscriptions } from "../api/playback.ts";
+import { persistenceRules } from "../global/chart/persistence.ts";
+import { workspaceShaderPasses } from "../global/chart/shader/workspacePasses.ts";
+import { noteFields } from "../global/chart/noteFields.ts";
 import {
   clearPersistedExtensionState,
   errorMessage,
@@ -502,6 +505,9 @@ export class ExtensionRuntime {
         scope?.dispose();
       } finally {
         extensionRegistry.removeOwner(record.manifest.id);
+        persistenceRules.removeOwner(record.manifest.id);
+        noteFields.removeOwner(record.manifest.id);
+        workspaceShaderPasses.removeOwner(record.manifest.id);
         if (purge) {
           settingsRegistry.purgeOwner(record.manifest.id);
         } else {
@@ -1774,6 +1780,9 @@ export class ExtensionRuntime {
         scope.dispose();
       } finally {
         extensionRegistry.removeOwner(record.manifest.id);
+        persistenceRules.removeOwner(record.manifest.id);
+        noteFields.removeOwner(record.manifest.id);
+        workspaceShaderPasses.removeOwner(record.manifest.id);
         if (purge) {
           settingsRegistry.purgeOwner(record.manifest.id);
         } else {

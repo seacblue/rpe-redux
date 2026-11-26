@@ -11,7 +11,7 @@
 | `context.ui` | 扩展运行时，显示通知和注册表面 | `ui.notice(...)`、`ui.registerPanel(...)` |
 | `context.storage` | 扩展运行时，保存任意 JSON 数据 | 缓存上次导入的文件 |
 
-`context.api` 上的 handle 见[API 总览](api:)。`context` 上的成员不是 handle，不能拼成 `context.api.ui.notice(...)`。
+`context.api` 上的各类 handle 会直接列在左侧 API 下面，例如 [chart API](api:chart)。`context` 上的成员不是 handle，不能拼成 `context.api.ui.notice(...)`。
 
 ## context 成员
 
@@ -78,4 +78,4 @@
 - [数据持久化](persistence.md)
 - [面板与菜单](panels-and-menus.md)
 - [声明式 UI](ui-reference.md)
-- [API 总览](api:)
+- 左侧 **API** 树：按 handle 查看具体方法和属性。

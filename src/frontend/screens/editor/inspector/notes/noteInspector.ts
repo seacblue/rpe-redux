@@ -48,6 +48,7 @@ import {
   type NotePropertyField,
   type PropertyControl,
 } from "./model.ts";
+import { noteFields } from "../../../../../core/global/chart/noteFields.ts";
 
 type FieldName =
   | "type"
@@ -109,6 +110,7 @@ interface PropertiesRenderContext {
   language: string;
   entries: NoteCaptureEntry[];
   hitSoundNames: string[];
+  noteFieldRevision: number;
 }
 
 /**
@@ -248,7 +250,8 @@ export function renderProperties(
     previous.multiLineMode === session.multiLineMode &&
     previous.language === language &&
     sameEntries(previous.entries, entries) &&
-    sameNames(previous.hitSoundNames, hitSoundNames)
+    sameNames(previous.hitSoundNames, hitSoundNames) &&
+    previous.noteFieldRevision === noteFields.getRevision()
   ) {
     return;
   }
@@ -262,6 +265,7 @@ export function renderProperties(
     language,
     entries,
     hitSoundNames,
+    noteFieldRevision: noteFields.getRevision(),
   });
   state.selectedCount.set(entries.length);
   const selectedEntry = entries[0];
@@ -633,6 +637,44 @@ export function renderProperties(
               return control.value;
             }
           : undefined,
+      });
+    }
+    for (const definition of noteFields.list()) {
+      if (fields.some((field) => field.key === definition.field)) {
+        continue;
+      }
+      const authored = (note as Record<string, unknown>)[definition.field];
+      const value = authored === undefined || authored === null ? "" : String(authored);
+      const present = value !== "";
+      const apply = (control: PropertyControl) => {
+        applyNoteTransform(
+          session,
+          t("editorPanels.inspector.modify", { field: definition.label }),
+          (current) => {
+            const next = { ...current } as Record<string, unknown>;
+            if (control.value === "" || control.value === String(definition.clearValue ?? "")) {
+              delete next[definition.field];
+            } else {
+              next[definition.field] =
+                definition.kind === "number" ? Number(control.value) : control.value;
+            }
+            return next as JudgeLineNote;
+          },
+        );
+      };
+      fields.push({
+        key: definition.field,
+        label: definition.label,
+        kind: definition.kind,
+        value,
+        preservesDraft: definition.kind !== "select",
+        options: definition.options?.map(([option, optionLabel]) => [option, optionLabel]),
+        present,
+        dirty: present,
+        reset: () => apply({ value: "" }),
+        apply,
+        focus,
+        blur,
       });
     }
   }

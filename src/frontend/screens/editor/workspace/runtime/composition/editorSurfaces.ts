@@ -8,6 +8,8 @@ export interface PreviewSurface {
   readonly canvas: HTMLCanvasElement;
   readonly noteBatch: HTMLCanvasElement;
   readonly shader: HTMLCanvasElement;
+  readonly mask: HTMLCanvasElement;
+  readonly noteFieldMask: HTMLCanvasElement;
   readonly overlay: HTMLCanvasElement;
 }
 

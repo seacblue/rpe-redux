@@ -4,6 +4,7 @@ import type { Beat } from "../../global/chart/timing/beat.ts";
 import type { LineEventValue } from "../../global/chart/chart.ts";
 import type { BatchParameters, MultiEditKind } from "./parameters.ts";
 import type { SelectionEditResult } from "../selection/edits.ts";
+import { noteFields } from "../../global/chart/noteFields.ts";
 
 type BatchVocabularyEntry = readonly [string, MessageKey];
 
@@ -23,6 +24,17 @@ export const NOTE_BATCH_FIELDS: readonly BatchVocabularyEntry[] = [
   ["green", "editor.commands.multiEdit.channel.green"],
   ["blue", "editor.commands.multiEdit.channel.blue"],
 ];
+
+/** Return built-in and currently registered Extension note channels. */
+export function noteBatchFields(): readonly (readonly [string, string])[] {
+  return Object.freeze([
+    ...NOTE_BATCH_FIELDS,
+    ...noteFields
+      .list()
+      .filter((field) => field.batch !== false)
+      .map((field) => [field.field, field.label] as const),
+  ]);
+}
 
 export const EVENT_BATCH_FIELDS: readonly BatchVocabularyEntry[] = [
   ["both", "editor.commands.multiEdit.eventField.both"],
