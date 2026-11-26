@@ -100,8 +100,12 @@ async function prepareLibraryAssets(input: LibrarySaveInput): Promise<AssetMap> 
     if (!hasThumbnail) {
       return assets;
     }
-    assets.delete(LIBRARY_THUMBNAIL_ASSET);
-    return saveAssetSnapshot(assets);
+    const snapshot = saveAssetSnapshot(assets);
+    const snapshotNames = new Set(assetNames(snapshot));
+    snapshot.delete(LIBRARY_THUMBNAIL_ASSET);
+    snapshotNames.delete(LIBRARY_THUMBNAIL_ASSET);
+    snapshot.names = () => snapshotNames;
+    return snapshot;
   }
   const bytes = assets.get(background) ?? (await assets.read?.(background)) ?? null;
   if (!bytes) {
@@ -121,8 +125,8 @@ async function prepareLibraryAssets(input: LibrarySaveInput): Promise<AssetMap> 
   if (!thumbnail) {
     return assets;
   }
-  assets.set(LIBRARY_THUMBNAIL_ASSET, thumbnail);
   const snapshot = saveAssetSnapshot(assets);
+  snapshot.set(LIBRARY_THUMBNAIL_ASSET, thumbnail);
   const snapshotNames = new Set(assetNames(snapshot));
   snapshotNames.add(LIBRARY_THUMBNAIL_ASSET);
   snapshot.names = () => snapshotNames;
