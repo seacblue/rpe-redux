@@ -19,7 +19,6 @@ import { createPreviewRuntime } from "../providers/PreviewProvider.tsx";
 import { createTimelineRuntime } from "../providers/TimelineProvider.tsx";
 import { createInspectorRuntime } from "../providers/InspectorProvider.tsx";
 import { createDocumentRuntime } from "../providers/DocumentProvider.tsx";
-import { openAssets as openDocumentAssets } from "../../document/lifecycle/service.ts";
 import { appendAutomaticSnapshot } from "../../document/save/snapshots.ts";
 import type { EditorSurfaces } from "./editorSurfaces.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
@@ -392,9 +391,6 @@ export function createEditorAssembly(
     ui,
     invalidate,
     notify,
-    openAssets: () => {
-      void openDocumentAssets();
-    },
     atHome,
     offsetSeconds,
     tempo: tempo.get,
