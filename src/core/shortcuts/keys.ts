@@ -92,6 +92,32 @@ const KEY_ALIASES: Record<string, string> = {
   "`": "TILDE",
 };
 
+for (let digit = 0; digit <= 9; digit += 1) {
+  KEY_ALIASES[String(digit)] = `DIGIT${digit}`;
+}
+
+/** Keyboard-code tokens that preserve the physical source of numeric input. */
+const PHYSICAL_KEY_CODES: Record<string, string> = Object.fromEntries([
+  ...Array.from({ length: 10 }, (_, digit) => [`Digit${digit}`, `DIGIT${digit}`]),
+  ...Array.from({ length: 10 }, (_, digit) => [`Numpad${digit}`, `NUMPAD${digit}`]),
+  ["NumpadDecimal", "NUMPADDECIMAL"],
+  ["NumpadAdd", "NUMPADADD"],
+  ["NumpadSubtract", "NUMPADSUBTRACT"],
+  ["NumpadMultiply", "NUMPADMULTIPLY"],
+  ["NumpadDivide", "NUMPADDIVIDE"],
+  ["NumpadEnter", "NUMPADENTER"],
+  ["NumpadEqual", "NUMPADEQUAL"],
+  ["NumpadComma", "NUMPADCOMMA"],
+  ["NumpadParenLeft", "NUMPADPARENLEFT"],
+  ["NumpadParenRight", "NUMPADPARENRIGHT"],
+  ["NumpadClear", "NUMPADCLEAR"],
+]);
+
+/** Convert a DOM keyboard code to a physical shortcut token when it matters. */
+export function shortcutKeyFromCode(code: string | undefined): string | null {
+  return code === undefined ? null : (PHYSICAL_KEY_CODES[code] ?? null);
+}
+
 const NAMED_KEYS = new Set([
   "SPACE",
   "ENTER",
@@ -125,6 +151,19 @@ const NAMED_KEYS = new Set([
   "PRINTSCREEN",
   "PAUSE",
   "CONTEXTMENU",
+  ...Array.from({ length: 10 }, (_, digit) => `DIGIT${digit}`),
+  ...Array.from({ length: 10 }, (_, digit) => `NUMPAD${digit}`),
+  "NUMPADDECIMAL",
+  "NUMPADADD",
+  "NUMPADSUBTRACT",
+  "NUMPADMULTIPLY",
+  "NUMPADDIVIDE",
+  "NUMPADENTER",
+  "NUMPADEQUAL",
+  "NUMPADCOMMA",
+  "NUMPADPARENLEFT",
+  "NUMPADPARENRIGHT",
+  "NUMPADCLEAR",
 ]);
 
 /** Normalises one token a person might have written into its canonical name. */
@@ -175,7 +214,12 @@ export function isPointerKey(key: string): boolean {
 /** Whether the canonical token names a key this build can bind. */
 export function isSupportedKey(key: string): boolean {
   return (
-    /^[A-Z0-9]$/.test(key) ||
+    /^[A-Z]$/.test(key) ||
+    /^DIGIT[0-9]$/.test(key) ||
+    /^NUMPAD[0-9]$/.test(key) ||
+    /^NUMPAD(?:DECIMAL|ADD|SUBTRACT|MULTIPLY|DIVIDE|ENTER|EQUAL|COMMA|PARENLEFT|PARENRIGHT|CLEAR)$/.test(
+      key,
+    ) ||
     /^F([1-9]|1[0-9]|2[0-4])$/.test(key) ||
     NAMED_KEYS.has(key) ||
     isMouse(key)
@@ -206,7 +250,13 @@ export function parseShortcut(text: unknown): ParsedShortcut {
     return { ok: false, error: "shortcuts.error.emptyPart" };
   }
   const parts = raw.map((part) => normalizeShortcutKey(part));
-  if (raw.some((part, index) => part.trim().toUpperCase() !== parts[index])) {
+  if (
+    raw.some((part, index) => {
+      const written = part.trim().toUpperCase();
+      const legacyDigit = /^[0-9]$/.test(written) && parts[index] === `DIGIT${written}`;
+      return written !== parts[index] && !legacyDigit;
+    })
+  ) {
     return { ok: false, error: "shortcuts.error.invalidSyntax" };
   }
   if (new Set(parts).size !== parts.length) {
@@ -307,6 +357,25 @@ const DISPLAY: Record<string, string> = {
   WHEELRIGHT: "Wheel Right",
 };
 
+for (let digit = 0; digit <= 9; digit += 1) {
+  DISPLAY[`DIGIT${digit}`] = String(digit);
+  DISPLAY[`NUMPAD${digit}`] = `Num ${digit}`;
+}
+
+Object.assign(DISPLAY, {
+  NUMPADDECIMAL: "Num .",
+  NUMPADADD: "Num +",
+  NUMPADSUBTRACT: "Num -",
+  NUMPADMULTIPLY: "Num *",
+  NUMPADDIVIDE: "Num /",
+  NUMPADENTER: "Num Enter",
+  NUMPADEQUAL: "Num =",
+  NUMPADCOMMA: "Num ,",
+  NUMPADPARENLEFT: "Num (",
+  NUMPADPARENRIGHT: "Num )",
+  NUMPADCLEAR: "Num Clear",
+});
+
 /** How one token reads in the interface, on this platform. */
 export function formatKeyToken(token: string): string {
   if (token === "LEFTMETA" || token === "RIGHTMETA") {
@@ -369,6 +438,11 @@ const ARIA_KEYS: Record<string, string> = {
   QUOTE: "'",
   TILDE: "`",
 };
+
+for (let digit = 0; digit <= 9; digit += 1) {
+  ARIA_KEYS[`DIGIT${digit}`] = String(digit);
+  ARIA_KEYS[`NUMPAD${digit}`] = String(digit);
+}
 
 /**
  * A binding in the `aria-keyshortcuts` grammar, or `""` when it is not a

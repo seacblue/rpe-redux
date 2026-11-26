@@ -248,6 +248,20 @@ const navigationShortcuts: readonly EditorShortcutDefinition[] = [
     scope: "editor",
     defaults: [{ key: "WHEELDOWN", modifiers: ["ALT", "SHIFT"] }],
   },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.multiLineLeft,
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
+    title: "shortcuts.editor.multiLineScrollLeft",
+    scope: "editor",
+    defaults: [{ key: "WHEELUP", modifiers: ["CTRL", "SHIFT"] }],
+  },
+  {
+    id: TIMELINE_WHEEL_SHORTCUT_IDS.multiLineRight,
+    category: SHORTCUT_CATEGORIES.editorNavigation.id,
+    title: "shortcuts.editor.multiLineScrollRight",
+    scope: "editor",
+    defaults: [{ key: "WHEELDOWN", modifiers: ["CTRL", "SHIFT"] }],
+  },
 ];
 /** The editor's categories, in the order the settings page lists them. */
 const EDITOR_CATEGORIES: readonly ShortcutCategory[] = [

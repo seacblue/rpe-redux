@@ -44,7 +44,7 @@ export interface ShortcutContext {
  * they are written in.
  */
 export interface Shortcut {
-  /** The primary key: `"S"`, `"SPACE"`, `"MOUSE0"`, `"WHEELUP"`. */
+  /** The primary key: `"S"`, `"DIGIT1"`, `"NUMPAD1"`, `"SPACE"`, `"MOUSE0"`, `"WHEELUP"`. */
   key: string;
   /** Omitted when the key is pressed on its own. */
   modifiers?: readonly Modifier[];
