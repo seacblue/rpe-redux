@@ -58,11 +58,7 @@ export const chart = Object.freeze({
       });
     },
     /** Add an exact fraction to a beat triple without converting through floating point. */
-    addFraction(
-      beat: readonly number[],
-      numerator: number,
-      denominator: number,
-    ): ApiResult<Beat> {
+    addFraction(beat: readonly number[], numerator: number, denominator: number): ApiResult<Beat> {
       return apiCall(() => {
         requireBeat(beat, "beat");
         return addBeatFraction(beat, numerator, denominator);

@@ -109,10 +109,7 @@ test("ToHold preserves exact beat triples when calculating the hold end", async 
       chart: {
         lines: async () => ({
           ok: true,
-          value: [
-            { notes: [{ id: "note-1", startTime: [2, 0, 1] }] },
-            { notes: [] },
-          ],
+          value: [{ notes: [{ id: "note-1", startTime: [2, 0, 1] }] }, { notes: [] }],
         }),
         beats: {
           addFraction: async (beat, numerator, denominator) => ({
