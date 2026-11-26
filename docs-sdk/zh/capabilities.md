@@ -145,6 +145,5 @@ export default {
 ## 相关接口
 
 - [快速开始](getting-started.md)：清单与激活流程。
-- [安全模型](security.md)：沙箱边界、信任状态和资源预算。
-- 左侧 **API** 树：每个方法对应的能力、参数、风险和写状态；异步约定见[API 约定](api-reference.md)。
+- 左侧 **API** 树：每个方法对应自己的能力、参数、风险、写状态和错误处理。
 - [数据持久化](persistence.md)：`storage`、`settings`、`values` 的实际用法。

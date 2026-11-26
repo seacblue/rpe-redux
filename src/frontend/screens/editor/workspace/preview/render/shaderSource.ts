@@ -75,6 +75,10 @@ export function fragmentSource(source: string, webgl2 = false): string {
   }
   const adapted = `precision mediump float;
 uniform sampler2D u_texture;
+uniform sampler2D u_layerMask;
+uniform vec4 u_layerMaskSelection;
+uniform sampler2D u_noteFieldMask;
+uniform vec4 u_noteFieldMaskSelection;
 varying vec2 v_texCoord;
 uniform vec2 rpeRectMin;
 uniform vec2 rpeRectMax;
@@ -89,6 +93,20 @@ vec4 rpeSample(sampler2D source, vec2 coordinate) {
 }
 vec4 rpeSampleProj(sampler2D source, vec4 coordinate) { return rpeSample(source, coordinate.xy / coordinate.w); }
 vec4 rpeSampleProj(sampler2D source, vec3 coordinate) { return rpeSample(source, coordinate.xy / coordinate.z); }
+float rpeLayerMask(vec2 coordinate) {
+  vec2 local = (coordinate - ${origin}) / ${size};
+  if (local.x < 0.0 || local.x > 1.0 || local.y < 0.0 || local.y > 1.0) {
+    return 0.0;
+  }
+  return dot(texture2D(u_layerMask, mix(rpeRectMin, rpeRectMax, local)), u_layerMaskSelection);
+}
+float rpeNoteFieldMask(vec2 coordinate) {
+  vec2 local = (coordinate - ${origin}) / ${size};
+  if (local.x < 0.0 || local.x > 1.0 || local.y < 0.0 || local.y > 1.0) {
+    return 0.0;
+  }
+  return dot(texture2D(u_noteFieldMask, mix(rpeRectMin, rpeRectMax, local)), u_noteFieldMaskSelection);
+}
 ${body}
 void main() {
   if (v_texCoord.x < rpeRectMin.x || v_texCoord.x > rpeRectMax.x || v_texCoord.y < rpeRectMin.y || v_texCoord.y > rpeRectMax.y) gl_FragColor = vec4(0.0);

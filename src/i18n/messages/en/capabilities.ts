@@ -17,6 +17,15 @@ export default {
   "settings.extensions.capability.chart.write.label": "Edit chart data",
   "settings.extensions.capability.chart.write.description":
     "Change chart metadata, judge lines, notes, and events through validated transactions.",
+  "settings.extensions.capability.chart.persistence.label": "Project chart output",
+  "settings.extensions.capability.chart.persistence.description":
+    "Register field projections that change saved and exported chart copies.",
+  "settings.extensions.capability.chart.note-fields.label": "Add native note fields",
+  "settings.extensions.capability.chart.note-fields.description":
+    "Register note properties that appear in the native inspector and batch editor.",
+  "settings.extensions.capability.workspace.shader.label": "Add workspace shaders",
+  "settings.extensions.capability.workspace.shader.description":
+    "Register full-screen GLSL passes in the editor preview and export metadata.",
   "settings.extensions.capability.selection.read.label": "Read the selection",
   "settings.extensions.capability.selection.read.description":
     "Read the current note and event selection.",

@@ -12,6 +12,7 @@ import {
 } from "../../../frontend/screens/editor/workspace/preview/render/background.ts";
 import { shaderTextureSize } from "../../../frontend/screens/editor/workspace/preview/render/shaderPipeline.ts";
 import { fragmentSource } from "../../../frontend/screens/editor/workspace/preview/render/shaderSource.ts";
+import { previewNoteFieldMaskColor } from "../../../frontend/screens/editor/workspace/preview/drawing/previewLines.ts";
 import { defaultShaderUniform } from "../../../core/global/chart/shader/shader.ts";
 import { selectionMapForSession } from "../../../frontend/screens/editor/workspace/preview/interaction/previewSelectionMap.ts";
 
@@ -180,6 +181,40 @@ test("portable shader coordinates keep standard screen uniforms in the preview d
   assert.match(adapted, /rpeSample\(u_texture, rpeCoordinate/);
   assert.match(adapted, /screenSize/);
   assert.match(adapted, /u_time/);
+});
+
+test("workspace shaders receive a semantic layer-mask sampling helper", () => {
+  const adapted = fragmentSource(
+    `uniform sampler2D screenTexture;\nvoid main() { gl_FragColor = vec4(rpeLayerMask(uv)); }`,
+  );
+  assert.match(adapted, /uniform sampler2D u_layerMask/);
+  assert.match(adapted, /uniform vec4 u_layerMaskSelection/);
+  assert.match(adapted, /float rpeLayerMask\(vec2 coordinate\)/);
+  assert.match(adapted, /dot\(texture2D\(u_layerMask/);
+});
+
+test("workspace shaders receive a contributed note-field sampling helper", () => {
+  const adapted = fragmentSource(
+    `uniform sampler2D screenTexture;\nvoid main() { gl_FragColor = vec4(rpeNoteFieldMask(uv)); }`,
+  );
+  assert.match(adapted, /uniform sampler2D u_noteFieldMask/);
+  assert.match(adapted, /uniform vec4 u_noteFieldMaskSelection/);
+  assert.match(adapted, /float rpeNoteFieldMask\(vec2 coordinate\)/);
+  assert.match(adapted, /dot\(texture2D\(u_noteFieldMask/);
+});
+
+test("note-field masks stay opaque when selecting an RGB channel", () => {
+  assert.equal(previewNoteFieldMaskColor([255, 0, 0, 0]), "rgba(255, 0, 0, 1)");
+  assert.equal(previewNoteFieldMaskColor([0, 255, 0, 0]), "rgba(0, 255, 0, 1)");
+});
+
+test("WebGL2 workspace shaders declare semantic mask samplers only once", () => {
+  const adapted = fragmentSource(
+    `uniform sampler2D screenTexture;\nvoid main() { gl_FragColor = vec4(rpeNoteFieldMask(uv)); }`,
+    true,
+  );
+  assert.equal((adapted.match(/uniform sampler2D u_layerMask;/g) ?? []).length, 1);
+  assert.equal((adapted.match(/uniform sampler2D u_noteFieldMask;/g) ?? []).length, 1);
 });
 
 test("built-in shaders use logical resolution for gl_FragCoord", () => {

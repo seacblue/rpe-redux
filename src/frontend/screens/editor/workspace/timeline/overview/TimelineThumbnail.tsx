@@ -52,6 +52,8 @@ export function TimelineThumbnailView() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const noteBatchCanvas = useRef<HTMLCanvasElement>(null);
   const shaderCanvas = useRef<HTMLCanvasElement>(null);
+  const maskCanvas = useRef<HTMLCanvasElement>(null);
+  const noteFieldMaskCanvas = useRef<HTMLCanvasElement>(null);
   const overlayCanvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<Preview | null>(null);
   const snapshot = useEditorRuntimeValue((runtime) => runtime.ui.timelineThumbnail.snapshot, null);
@@ -61,13 +63,17 @@ export function TimelineThumbnailView() {
     const element = canvas.current;
     const noteBatch = noteBatchCanvas.current;
     const shader = shaderCanvas.current;
+    const mask = maskCanvas.current;
+    const noteFieldMask = noteFieldMaskCanvas.current;
     const overlay = overlayCanvas.current;
-    if (!element || !noteBatch || !shader || !overlay) {
+    if (!element || !noteBatch || !shader || !mask || !noteFieldMask || !overlay) {
       return;
     }
     const preview = new Preview(element, {
       noteBatch,
       shader,
+      mask,
+      noteFieldMask,
       overlay,
       display: createPreviewDisplay(
         {
@@ -126,6 +132,8 @@ export function TimelineThumbnailView() {
       <canvas ref={canvas} aria-hidden="true" />
       <canvas ref={noteBatchCanvas} className="preview-note-batch" aria-hidden="true" />
       <canvas ref={shaderCanvas} className="preview-shader-layer" aria-hidden="true" />
+      <canvas ref={maskCanvas} className="preview-shader-mask" aria-hidden="true" />
+      <canvas ref={noteFieldMaskCanvas} className="preview-shader-mask" aria-hidden="true" />
       <canvas ref={overlayCanvas} className="preview-overlay-layer" aria-hidden="true" />
       <span>{snapshot ? `${snapshot.scene.seconds.toFixed(2)} s` : ""}</span>
     </div>

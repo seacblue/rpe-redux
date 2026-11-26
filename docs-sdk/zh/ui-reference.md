@@ -480,4 +480,4 @@ const pet = context.ui.registerSurface({
 - [面板与菜单](panels-and-menus.md)：注册面板、侧栏、工具栏和覆盖层。
 - [设计系统](design-system.md)：组件参数、token 和图标目录。
 - `ui.registerSurface`、`ui.openModalSurface`、`ui.openAnchoredSurface`、`ui.pickFile`、`ui.saveFile`：图像/动画 surface 与文件对话框。
-- 左侧 **API** 树：确认 `ui.*` 方法是否已登记；异步约定见[API 约定](api-reference.md)。
+- 左侧 **API** 树：确认 `ui.*` 方法是否已登记，并查看对应方法的权限、返回值和错误处理。

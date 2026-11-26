@@ -37,4 +37,4 @@ Package media requires `assets.read`; `assets.write` is separate and only applie
 
 ## Related APIs
 
-See [API conventions](api-reference.md), [Security model](security.md), and [Extension context](context.md).
+See the generated API method pages for each handle, [Extension context](context.md), and [Getting started](getting-started.md).

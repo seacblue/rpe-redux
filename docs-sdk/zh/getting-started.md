@@ -1,6 +1,6 @@
 # 快速开始
 
-本页用三个步骤完成一个可安装的 RPE Redux 扩展：准备清单、注册脚本并显示通知、启用调试。示例代码可以直接复制到 `user-data/extensions/example.hello/` 下运行。
+本页用三个步骤完成一个可安装的 RPE Redux 扩展：准备清单、注册脚本并显示通知、启用调试。示例代码可以直接复制到 `user-data/extensions/example.hello/` 下运行；桌面应用也可以从 **设置 → 扩展 → 选择 ZIP** 审阅并安装 ZIP。
 
 ## 步骤一：准备扩展目录
 
@@ -29,10 +29,37 @@
 | `kind` | `extension`、`mod`（旧别名）、`data-only` 或 `script` | `extension` |
 | `engines` | 宿主 major 数字，或覆盖完整版本号的 semver 范围 | `>=1.0.0-a1 <2.0.0` |
 | `entry` | 入口文件，相对包目录 | `index.js` |
+| `i18n` | 可选的包内翻译目录，必须包含 `en` 条目 | `i18n.json` |
 | `capabilities` | 请求的能力；用户确认后才授予 | `scripts`、`ui.notice` |
 | `author` / `license` | 来源元数据，不产生信任 | 自定义 |
+| `description` | 包描述，也可以由 `i18n.json` 提供 | `Minimal example extension.` |
+
+需要确认权限具体授予什么时，查看[能力与授权](capabilities.md)；`activate(context)` 和沙箱边界见[扩展上下文](context.md)。
 
 没有 `entry` 的包是数据包，必须在 `scripts` 中声明声明式步骤；数据包不能请求 `ui.*` 或 `shortcuts`。
+
+`i18n.json` 是可选的。添加后在 manifest 中写入 `"i18n": "i18n.json"`，并提供包含扁平 key 的 `en` 条目；其他语言应保持相同 key。脚本标题使用本地化引用，不需要再包一层对象：
+
+```json
+{
+  "en": {
+    "name": "Hello",
+    "description": "A minimal example.",
+    "script.hello.label": "Say hello"
+  },
+  "zh": {
+    "name": "你好",
+    "description": "一个最小示例。",
+    "script.hello.label": "打个招呼"
+  }
+}
+```
+
+```js
+label: {
+  key: "script.hello.label";
+}
+```
 
 ## 步骤二：注册脚本并显示通知
 
@@ -83,9 +110,9 @@ export default {
 ## 步骤三：启用、调试与下一步
 
 1. 打开 **设置 → 扩展**。
-2. 找到 `Hello Extension`，启用或重新加载。
-3. 在脚本面板运行“打个招呼”，应出现一条成功通知。
-4. 修改 `index.js` 后使用扩展卡片的重新加载动作；需要跨会话保留的状态写入 `context.storage`。
+2. 找到 `Hello Extension`，启用并接受它请求的能力。
+3. 在脚本面板运行“打个招呼”，出现成功通知就是第一条完整链路已跑通。
+4. 修改 `index.js` 后使用扩展卡片的重新加载动作。如果扩展没有出现在列表里，先检查目录名、manifest id 和 entry 路径，再排查代码。
 
 调试时可以用 `ui.notice(JSON.stringify(value))` 输出小范围状态，用 `api.diagnostics.snapshot()` 检查宿主运行时是否就绪。扩展列表会显示最近错误；回调在 30 秒窗口内失败 5 次会触发失败预算并自动停用扩展，最近错误最多保留 12 条。
 
@@ -102,10 +129,11 @@ export default {
 
 下一步：
 
+- 想添加原生音符字段或 Shader：打开生成的 `noteFields`、`shader` 和 `persistence` API 页面，再查看仓库内的 `docs/extensions-zh.md` 组合契约。
 - 想改谱面：读[谱面操作](place-note.md)，里面有完整的“读取 → 事务 → 结果”流程和插音符示例。
 - 做界面前读[设计系统](design-system.md)，按组件和 token 选择写法。
 - 需要面板、侧栏、工具栏和右键菜单时读[面板与菜单](panels-and-menus.md)。
 - 需要保存配置时读[数据持久化](persistence.md)。
 - 不清楚 `context`、`ui`、`scripts`、`storage` 分别是什么：读[扩展上下文](context.md)。
 - 遇到 `ChartTransactionRequest`、`ChartObjectId`、`ApiResult` 这类类型名：查[类型与术语](types.md)。
-- 需要确认某个方法是否登记、需要什么能力时，在左侧 **API** 树按 handle 查方法页；异步约定见[API 约定](api-reference.md)。
+- 需要确认某个方法是否登记、需要什么能力和错误处理时，在左侧 **API** 树打开对应的 handle 方法页。

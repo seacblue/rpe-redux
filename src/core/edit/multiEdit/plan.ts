@@ -17,6 +17,7 @@ import {
 } from "../../global/chart/timing/beat.ts";
 import { countScoringNotes, HOOK_TAIL_FIELD, pinHookedEvent } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
+import { noteFields } from "../../global/chart/noteFields.ts";
 import type { ExpressionScope } from "../../utils/batchScript.ts";
 import { alignShaderParameters } from "../../global/chart/shader/shaderEvents.ts";
 import { eventList, eventKey, chartWithEventLists } from "../events/eventTracks.ts";
@@ -115,7 +116,6 @@ const EXPRESSION_SCOPE_PROBE: BatchItem = {
   visibleTime: 1,
   alpha: 1,
   judgeArea: 1,
-  tint: [1, 1, 1],
   type: 1,
   isFake: 0,
   above: 1,
@@ -513,8 +513,10 @@ export function previewMultiEdit(
   const operation = options.operation ?? "By";
   const random = randomSource(options.seed ?? 1);
   const modifier =
-    field === "hitSound"
-      ? null
+    field === "hitSound" || (kind === "notes" && noteFields.findByField(field) !== null)
+      ? noteFields.findByField(field)?.kind === "select" || field === "hitSound"
+        ? null
+        : distribution(options, random)
       : field === "t1" || field === "t2"
         ? beatDistribution(options, random)
         : distribution(options, random);
@@ -574,11 +576,40 @@ export function previewMultiEdit(
         lineIndex: sourceLine,
         copy: false,
       };
-      if (field === "hitSound") {
-        if (operation !== "To") {
-          throw new Error(t("editor.commands.multiEdit.error.hitSoundOperation"));
+      const noteField = kind === "notes" ? noteFields.findByField(field) : null;
+      const fieldOperation = noteField?.kind === "select" ? "To" : operation;
+      if (field === "hitSound" && operation !== "To") {
+        throw new Error(t("editor.commands.multiEdit.error.hitSoundOperation"));
+      }
+      if (field === "hitSound" || noteField?.kind === "select") {
+        if (noteField) {
+          const value = String(options.lower || "");
+          if (
+            noteField.kind === "select" &&
+            !noteField.options?.some(([option]) => option === value)
+          ) {
+            throw new Error(t("editor.commands.multiEdit.error.noteFieldValue"));
+          }
+          if (value === "" || value === String(noteField.clearValue ?? "")) {
+            delete after[noteField.field];
+          } else {
+            after[noteField.field] = noteField.kind === "number" ? Number(value) : value;
+          }
+        } else {
+          after.hitSound = String(options.lower || options.upper || "");
         }
-        after.hitSound = String(options.lower || options.upper || "");
+      } else if (noteField?.kind === "number") {
+        const before = Number(after[noteField.field] ?? noteField.defaultValue ?? 0);
+        if (!Number.isFinite(before)) {
+          throw new Error(t("editor.commands.multiEdit.error.unsupportedField"));
+        }
+        const endpointDistribution = kind === "notes";
+        const progress = endpointDistribution ? scope.u : (index + 1) / entries.length;
+        const value = modifier !== null ? modifier(index, progress) : null;
+        if (value === null) {
+          return;
+        }
+        after[noteField.field] = batchOperation(before, value, fieldOperation);
       } else {
         const endpointDistribution =
           kind === "notes" || ["line", "duration", "order"].includes(field);
@@ -588,27 +619,27 @@ export function previewMultiEdit(
           return;
         }
         if (field === "line") {
-          change.lineIndex = Math.round(batchOperation(sourceLine, value, operation));
+          change.lineIndex = Math.round(batchOperation(sourceLine, value, fieldOperation));
           change.copy = kind === "events";
         } else if (field === "both") {
           if (typeof after.start !== "number" || typeof after.end !== "number") {
             throw new Error(t("editor.commands.multiEdit.error.valueOnly"));
           }
-          after.start = batchOperation(after.start, value, operation);
-          after.end = batchOperation(after.end, value, operation);
+          after.start = batchOperation(after.start, value, fieldOperation);
+          after.end = batchOperation(after.end, value, fieldOperation);
         } else if (field === "duration" && kind === "events") {
-          const duration = Math.max(0, batchOperation(scope.duration, value, operation));
+          const duration = Math.max(0, batchOperation(scope.duration, value, fieldOperation));
           const durationBeat = toBeat(duration);
           after.startTime = time;
           after.endTime = addBeats(time, durationBeat);
           time = addBeats(time, durationBeat);
         } else if (field === "order") {
-          change.priority = batchOperation(scope.u, value, operation);
+          change.priority = batchOperation(scope.u, value, fieldOperation);
         } else {
           if (typeof scope[field] !== "number") {
             throw new Error(t("editor.commands.multiEdit.error.unsupportedField"));
           }
-          writeField(after, field, batchOperation(scope[field], value, operation));
+          writeField(after, field, batchOperation(scope[field], value, fieldOperation));
         }
       }
       groupChanges.push(change);

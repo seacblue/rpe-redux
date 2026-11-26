@@ -92,6 +92,12 @@ export default {
   "settings.group.editingNoteFeatures": "Note properties",
   "settings.group.editingEventFeatures": "Event properties",
   "settings.group.editingLineFeatures": "Judge-line properties",
+  "settings.group.editingShaderFeatures": "Workspace shader export",
+  "settings.field.workspace-shader-export-mode.label": "Export mode",
+  "settings.field.workspace-shader-export-mode.description":
+    "Layered keeps semantic masks for Redux and PhiZone; Standalone uses plugin-provided fallback shaders for players without built-in layers.",
+  "settings.option.workspace-shader-export-mode.layered": "Layered (lossless metadata)",
+  "settings.option.workspace-shader-export-mode.standalone": "Standalone (portable fallback)",
   "settings.field.editing-note-speed-enabled.label": "Note speed",
   "settings.field.editing-note-y-offset-enabled.label": "Y offset",
   "settings.field.editing-note-visible-time-enabled.label": "Visible time",

@@ -4,6 +4,7 @@
  * region visibility belong here; individual passes own their drawing.
  */
 import { ShaderRuntime } from "../../../../../../core/global/chart/shader/shader.ts";
+import { workspaceShaderPasses } from "../../../../../../core/global/chart/shader/workspacePasses.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
 import type { PreviewGuideSurface } from "../drawing/previewGuides.ts";
 import type { PreviewDisplayAdapter } from "../surface/previewDisplay.ts";
@@ -29,6 +30,8 @@ export interface PreviewCompositeSurface extends PreviewGuideSurface {
   shaderRuntime: ShaderRuntime;
   display: PreviewDisplayAdapter;
   shaderCanvas: HTMLCanvasElement | null;
+  shaderMaskCanvas: HTMLCanvasElement | null;
+  shaderNoteFieldMaskCanvas: HTMLCanvasElement | null;
   overlayCanvas: HTMLCanvasElement | null;
   applyShaders: boolean;
   noiseComposited: boolean;
@@ -72,7 +75,13 @@ export function drawComposite(
   // Guides are cheap and identify the selected line; never put them behind the
   // adaptive quality gate. A missing number reads as a rendering failure, while
   // a slightly slower frame is invisible. Background blur follows the same rule.
-  const shaderEffects = surface.applyShaders ? frame.shaderEffects : [];
+  const shaderEffects = surface.applyShaders
+    ? [
+        ...workspaceShaderPasses.active("before-chart"),
+        ...frame.shaderEffects,
+        ...workspaceShaderPasses.active("after-chart"),
+      ]
+    : [];
   const globalShader = shaderEffects.some((effect) => effect.global);
   if (!shaderEffects.length && !gameUiOverlay) {
     guideStats = overlayDevice.render({ surface, frame, target: context });
@@ -89,6 +98,7 @@ export function drawComposite(
       passes: shaderEffects,
       seconds,
       sourceFor: (effect: PreviewShaderEffect) =>
+        (effect.workspacePassId ? workspaceShaderPasses.source(effect.shader) : null) ??
         surface.shaderRuntime.source(effect.shader, effect.sourceName),
       viewport,
       sourceRevision: frame.shaderSourceRevision,
@@ -96,6 +106,8 @@ export function drawComposite(
       inputLayer: shaderInput,
       textureLimit: surface.shaderTextureLimit ?? null,
       frameSize: { width: frame.width, height: frame.height },
+      maskCanvas: surface.shaderMaskCanvas,
+      noteFieldMaskCanvas: surface.shaderNoteFieldMaskCanvas,
     });
     if (surface.shaderCanvas) {
       surface.display.setShaderVisible(shaderRendered);

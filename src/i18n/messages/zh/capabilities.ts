@@ -17,6 +17,15 @@ export default {
   "settings.extensions.capability.chart.write.label": "编辑谱面数据",
   "settings.extensions.capability.chart.write.description":
     "通过校验过的事务修改谱面元数据、判定线、音符和事件。",
+  "settings.extensions.capability.chart.persistence.label": "改写谱面输出",
+  "settings.extensions.capability.chart.persistence.description":
+    "注册会影响保存与导出谱面副本的字段投影。",
+  "settings.extensions.capability.chart.note-fields.label": "添加原生音符字段",
+  "settings.extensions.capability.chart.note-fields.description":
+    "注册会显示在原生检查器和批量编辑器中的音符属性。",
+  "settings.extensions.capability.workspace.shader.label": "添加 Workspace Shader",
+  "settings.extensions.capability.workspace.shader.description":
+    "在编辑器预览和导出元数据中注册全屏 GLSL pass。",
   "settings.extensions.capability.selection.read.label": "读取选择",
   "settings.extensions.capability.selection.read.description": "读取当前选中的音符和事件。",
   "settings.extensions.capability.selection.write.label": "修改选择",

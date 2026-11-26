@@ -75,7 +75,10 @@ type FacadeHandle =
   | "hitTest"
   | "preview"
   | "theme"
-  | "help";
+  | "help"
+  | "persistence"
+  | "noteFields"
+  | "shader";
 
 /** Function-valued keys of one object type. */
 type FunctionMethod<T> = Extract<
@@ -276,6 +279,27 @@ const HANDLE_METHODS = {
   help: [
     ["availability", "ui.guide", "read", false],
     ["registerTutorial", "ui.guide", "write", true],
+  ],
+  persistence: [
+    ["list", "chart.persistence", "read", false],
+    ["register", "chart.persistence", "write", true],
+    ["unregister", "chart.persistence", "write", true],
+    ["enable", "chart.persistence", "write", true],
+    ["disable", "chart.persistence", "write", true],
+    ["inspect", "chart.persistence", "read", false],
+    ["project", "chart.persistence", "read", false],
+  ],
+  noteFields: [
+    ["list", "chart.note-fields", "read", false],
+    ["register", "chart.note-fields", "write", true],
+    ["unregister", "chart.note-fields", "write", true],
+  ],
+  shader: [
+    ["list", "workspace.shader", "read", false],
+    ["register", "workspace.shader", "write", true],
+    ["unregister", "workspace.shader", "write", true],
+    ["enable", "workspace.shader", "write", true],
+    ["disable", "workspace.shader", "write", true],
   ],
 } as const satisfies HandleSeedTable;
 

@@ -321,6 +321,7 @@ export default {
   "editor.commands.multiEdit.error.notFinite": "{key} 的结果不是有限数字",
   "editor.commands.multiEdit.error.easingResult": "结果中的缓动编号须为 1–29 的整数",
   "editor.commands.multiEdit.error.hitSoundOperation": "HitSound 仅支持 To",
+  "editor.commands.multiEdit.error.noteFieldValue": "所选值不符合这个音符字段的定义",
   "editor.commands.multiEdit.error.valueOnly":
     "首尾数值编辑适用于数值事件；颜色、文字、着色器可编辑时间或克隆",
   "editor.commands.multiEdit.error.unsupportedField": "当前物件不支持此数值属性",

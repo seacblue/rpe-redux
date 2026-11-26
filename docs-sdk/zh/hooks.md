@@ -189,5 +189,4 @@ interface SelectionOperationResult {
 
 - [扩展上下文](context.md)：`api`、`events` 和 `hooks` 的位置。
 - [能力清单](capabilities.md)：`hooks` 与 `events` 的授权。
-- [API 约定](api-reference.md)：异步 bridge、`ApiResult` 与错误边界。
 - [类型与术语](types.md)：SDK 使用的谱面和选择结构。

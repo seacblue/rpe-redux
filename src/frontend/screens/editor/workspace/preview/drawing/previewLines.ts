@@ -37,6 +37,8 @@ import type {
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
 import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import type { NoteColor } from "../../../canvas/noteSpriteGroups.ts";
+import { noteRenderLayer } from "../../../../../../core/global/chart/shader/renderLayers.ts";
+import { workspaceShaderPasses } from "../../../../../../core/global/chart/shader/workspacePasses.ts";
 
 /** Screen-space quad of a judge line, including its texture size and rotated corners. */
 function lineGeometry(
@@ -153,6 +155,10 @@ export function isPreviewNoteSelected(
 /** State read by line/note drawing and hit areas written during the frame. */
 export interface PreviewLineSurface extends PreviewTextureSurface {
   noteBatch: NoteBatch;
+  /** Temporary RGBA semantic layer atlas populated alongside visible notes. */
+  shaderMaskContext: CanvasRenderingContext2D | null;
+  /** Temporary note-field atlas populated alongside visible notes. */
+  shaderNoteFieldMaskContext: CanvasRenderingContext2D | null;
   /**
    * Note heads by `type * 2 + highlight`, refreshed by the owner when the paint begins.
    *
@@ -222,6 +228,177 @@ interface PreviewNoteScreenGeometry {
   headY: number;
   tailX: number;
   tailY: number;
+}
+
+/** State needed to paint a mask with the same local transform as the note skin. */
+interface PreviewNoteMaskPaint {
+  horizontal: number;
+  position: NoteState;
+  noteWidth: number;
+  scaleY: number;
+  lineCenterX: number;
+  lineCenterY: number;
+  lineRotationRadians: number;
+  skewShear: number;
+  holdRotation: number;
+  invertedCapRotation: number | null;
+  holdCapScale: number;
+  invertedHold: boolean;
+  showHead: boolean;
+  highlight: boolean;
+  holdCompact: boolean;
+  holdRepeat: boolean;
+}
+
+/** Paint a note shape while preserving the active skin texture's alpha. */
+function paintPreviewMaskShape(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  color: NoteColor,
+  fallbackColor: string,
+  paint: PreviewNoteMaskPaint,
+): void {
+  context.save();
+  context.globalCompositeOperation = "lighter";
+  context.fillStyle = fallbackColor;
+  context.strokeStyle = fallbackColor;
+  context.translate(paint.lineCenterX, paint.lineCenterY);
+  context.rotate(paint.lineRotationRadians);
+  let drawnBySkin: boolean;
+  if (entry.note.type === 2) {
+    drawnBySkin =
+      surface.skin?.hold(
+        context,
+        paint.horizontal,
+        -paint.position.y * paint.scaleY,
+        -paint.position.tail * paint.scaleY,
+        paint.noteWidth,
+        paint.highlight,
+        paint.showHead,
+        color,
+        paint.invertedCapRotation ?? paint.holdRotation,
+        paint.holdCapScale,
+        !paint.invertedHold,
+        paint.holdCompact,
+        paint.holdRepeat,
+      ) ?? false;
+  } else {
+    context.save();
+    context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+    context.transform(1, 0, paint.skewShear, 1, 0, 0);
+    drawnBySkin =
+      surface.skin?.head(context, entry.note.type, 0, 0, paint.noteWidth, paint.highlight, color) ??
+      false;
+    context.restore();
+  }
+  if (!drawnBySkin && entry.note.type === 2) {
+    if (paint.invertedHold) {
+      context.fillRect(
+        paint.horizontal - paint.noteWidth / 2,
+        -paint.position.tail * paint.scaleY - 2,
+        paint.noteWidth,
+        4,
+      );
+    } else {
+      context.fillRect(
+        paint.horizontal - paint.noteWidth / 2,
+        -paint.position.tail * paint.scaleY,
+        paint.noteWidth,
+        (paint.position.tail - paint.position.y) * paint.scaleY,
+      );
+    }
+    if (paint.showHead) {
+      context.save();
+      context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+      context.transform(1, 0, paint.skewShear, 1, 0, 0);
+      if (
+        !surface.skin?.head(context, entry.note.type, 0, 0, paint.noteWidth, paint.highlight, color)
+      ) {
+        context.fillRect(-paint.noteWidth / 2, -2, paint.noteWidth, 4);
+      }
+      context.restore();
+    }
+  } else if (!drawnBySkin) {
+    context.save();
+    context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+    context.transform(1, 0, paint.skewShear, 1, 0, 0);
+    context.fillRect(-paint.noteWidth / 2, -2, paint.noteWidth, 4);
+    context.restore();
+  }
+  context.restore();
+}
+
+/** Paint one note's semantic layer into the RGBA mask atlas. */
+function paintPreviewNoteMask(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  paint: PreviewNoteMaskPaint,
+): void {
+  const layer = noteRenderLayer(entry.note.type);
+  if (!layer) {
+    return;
+  }
+  const channels =
+    layer === "chart.note.hold"
+      ? [255, 0, 0]
+      : layer === "chart.note.drag"
+        ? [0, 255, 0]
+        : layer === "chart.note.tap"
+          ? [0, 0, 255]
+          : [0, 0, 0];
+  paintPreviewMaskShape(
+    context,
+    surface,
+    entry,
+    { mode: "selected", color: channels },
+    `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, 1)`,
+    paint,
+  );
+}
+
+/** Return an opaque RGBA fill for a note-field mask atlas pixel. */
+export function previewNoteFieldMaskColor(channels: readonly number[]): string {
+  return `rgba(${channels[0] ?? 0}, ${channels[1] ?? 0}, ${channels[2] ?? 0}, 1)`;
+}
+
+/** Paint the currently requested note-field selector into the field atlas. */
+function paintPreviewNoteFieldMask(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  paint: PreviewNoteMaskPaint,
+): void {
+  const note = entry.note as Record<string, unknown>;
+  const bindings = workspaceShaderPasses
+    .active()
+    .map((pass) => pass.mask)
+    .filter(
+      (mask) =>
+        mask?.atlas === "note-fields" &&
+        mask.field !== undefined &&
+        String(note[mask.field]) === String(mask.value),
+    );
+  if (!bindings.length) {
+    return;
+  }
+  const channels = [0, 0, 0, 0];
+  for (const binding of bindings) {
+    for (let channel = 0; channel < channels.length; channel += 1) {
+      if ((binding?.selection[channel] ?? 0) > 0.001) {
+        channels[channel] = 255;
+      }
+    }
+  }
+  paintPreviewMaskShape(
+    context,
+    surface,
+    entry,
+    { mode: "selected", color: channels.slice(0, 3) },
+    previewNoteFieldMaskColor(channels),
+    paint,
+  );
 }
 
 /** Resolve the screen coordinates shared by note rendering, culling, and picking. */
@@ -419,6 +596,30 @@ function drawPreviewNoteEntry(
   const noteColorStyle = previewNoteTintInto(tintTarget, entry.note, selected, selectionTint);
   const noteAlpha = holdFallbackAlpha(position.alpha, noteOpacity);
   const skewShear = noteSkewShear(position.skew);
+  const maskPaint: PreviewNoteMaskPaint = {
+    horizontal: geometry.horizontal,
+    position,
+    noteWidth,
+    scaleY,
+    lineCenterX,
+    lineCenterY,
+    lineRotationRadians,
+    skewShear,
+    holdRotation,
+    invertedCapRotation,
+    holdCapScale,
+    invertedHold,
+    showHead,
+    highlight,
+    holdCompact,
+    holdRepeat,
+  };
+  if (surface.shaderMaskContext) {
+    paintPreviewNoteMask(surface.shaderMaskContext, surface, entry, maskPaint);
+  }
+  if (surface.shaderNoteFieldMaskContext) {
+    paintPreviewNoteFieldMask(surface.shaderNoteFieldMaskContext, surface, entry, maskPaint);
+  }
   const batchAdded = isHold
     ? surface.noteBatch.addHold(
         surface.skin ?? null,

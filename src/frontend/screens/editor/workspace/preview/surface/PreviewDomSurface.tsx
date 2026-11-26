@@ -6,11 +6,11 @@ import {
 } from "../../../../../contracts/domSurface.ts";
 import type { PreviewSurface } from "../../runtime/composition/editorSurfaces.ts";
 
-/** Refs and attach callbacks for the four preview canvases. */
+/** Refs and attach callbacks for the six preview canvases. */
 export type PreviewSurfaceHandle = DomSurfaceHandle<PreviewSurface>;
 
 const previewSurface = createDomSurface<PreviewSurface>(
-  ["canvas", "noteBatch", "shader", "overlay"],
+  ["canvas", "noteBatch", "shader", "mask", "noteFieldMask", "overlay"],
   {
     selector: () => "preview.canvas",
     provider: "PreviewSurfaceProvider",

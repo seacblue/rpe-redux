@@ -6,6 +6,11 @@
 import { serializeChart } from "../../../../../../core/global/chart/chart.ts";
 import { registeredChartDocument } from "../../../../../../core/global/chart/streaming/chartDocumentRegistry.ts";
 import { extensionRegistry } from "../../../../../../core/extensions/runtime.ts";
+import {
+  hasPersistenceContributions,
+  prepareChartForPersistence,
+} from "../../../../../../core/global/chart/persistence.ts";
+import type { Chart } from "../../../../../../core/global/chart/chart.ts";
 import { yieldToHost } from "../../../../../../core/utils/yieldToHost.ts";
 
 interface SerializeResponse {
@@ -36,6 +41,13 @@ const serializer = {
 /** Serializes a chart on the main thread. */
 function inProcess(chart: unknown): string {
   return serializeChart(chart);
+}
+
+/** Prepare a plain chart copy before it crosses into a serializer worker. */
+function prepare(chart: unknown): unknown {
+  return hasPersistenceContributions() && chart && typeof chart === "object"
+    ? prepareChartForPersistence(chart as Chart, "save").chart
+    : chart;
 }
 
 /** Serialize one chart on the main thread for the requested output mode. */
@@ -166,6 +178,10 @@ class ChunkQueue {
 export async function* serializeChartStream(chart: unknown): AsyncIterable<string> {
   const document =
     chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
+  if (document && hasPersistenceContributions()) {
+    yield await serializeChartOffThread(await document.materializeAll());
+    return;
+  }
   if (document?.serialize) {
     const queue = new ChunkQueue();
     void document
@@ -191,12 +207,17 @@ export async function serializeChartOffThread(chart: unknown): Promise<string> {
   const document =
     chart && typeof chart === "object" ? registeredChartDocument(chart as object) : undefined;
   if (document?.serialize) {
-    const chunks: string[] = [];
-    await document.serialize((chunk) => {
-      chunks.push(chunk);
-    });
-    return chunks.join("");
+    if (hasPersistenceContributions()) {
+      chart = await document.materializeAll();
+    } else {
+      const chunks: string[] = [];
+      await document.serialize((chunk) => {
+        chunks.push(chunk);
+      });
+      return chunks.join("");
+    }
   }
+  chart = prepare(chart);
   const hasCustomSerializer =
     extensionRegistry.hasHook("chart:serialize") || extensionRegistry.hasHook("chart:validate");
   return serializeOffThread(chart, "chart", hasCustomSerializer);
