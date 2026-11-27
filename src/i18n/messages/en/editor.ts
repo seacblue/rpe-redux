@@ -344,6 +344,8 @@ export default {
   "editor.commands.multiEdit.error.easingResult":
     "The resulting easing index must be an integer from 1 to 29.",
   "editor.commands.multiEdit.error.hitSoundOperation": "HitSound only supports To.",
+  "editor.commands.multiEdit.error.noteFieldValue":
+    "The selected value is not valid for this note field.",
   "editor.commands.multiEdit.error.valueOnly":
     "Start and end value editing applies to numeric events; colour, text and shader events can edit time or be cloned.",
   "editor.commands.multiEdit.error.unsupportedField":

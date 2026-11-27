@@ -17,7 +17,10 @@ import type { LineSwitcher } from "../../timeline/lineSwitcher/lineSwitcher.ts";
 import type { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import type { EditorKeyboardBindingDependencies } from "../../../../../platform/shortcuts/editorKeyboard.ts";
 import { LINE_JUMP_SHORTCUT_ID } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
-import type { PrefixDigitSequenceSubmission } from "../../../../../../core/shortcuts/prefixDigitSequence.ts";
+import type {
+  PrefixSequenceSubmission,
+  PrefixSequenceTokenReader,
+} from "../../../../../../core/shortcuts/prefixSequence.ts";
 import type { CanvasShortcutTarget } from "../../../../../platform/shortcuts/canvasShortcuts.ts";
 import type { EditorSettingsBindings } from "../../../../settings/editorRuntime.ts";
 import type { HistoryTravelOptions } from "../../../../../../core/edit/operations/editing.ts";
@@ -28,7 +31,6 @@ import {
   editorLineTokens,
   editorPreviewRatio,
   editorRealtimePreviewEnabled,
-  editorSnapX,
 } from "../../../../../../core/edit/state/publishedValues.ts";
 import { lineSelectionGroups } from "../../../../../../core/edit/state/lineSelectionInput.ts";
 import {
@@ -53,7 +55,10 @@ import {
   connectEditing,
   createHistoryTravel,
 } from "../../../../../../core/edit/operations/editing.ts";
-import { bindTimelineControlInputs } from "../../../toolbar/timelineControls.ts";
+import {
+  bindTimelineControlInputs,
+  toggleTimelineSnap,
+} from "../../../toolbar/timelineControls.ts";
 import { bindParentLineControl } from "../../../toolbar/parentLineControls.ts";
 import { registerEditorKeyboardBindings } from "../../../../../platform/shortcuts/editorKeyboard.ts";
 import { samplingActive, startSamplingForSelection } from "../../../sampling/samplingSession.ts";
@@ -102,7 +107,8 @@ interface EditorBindingRuntime {
   reportError(error: unknown): void;
   notify: HistoryTravelOptions["notify"];
   /** Commit a passive judge-line prefix gesture. */
-  lineJump(submission: PrefixDigitSequenceSubmission): void;
+  lineJump(submission: PrefixSequenceSubmission): void;
+  lineJumpToken?: PrefixSequenceTokenReader;
   /** Cancel a pending timeline zoom before settings replace its scale. */
   cancelTimelineZoom?: () => void;
 }
@@ -363,13 +369,8 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
       transport.replayPlayback();
       return Promise.resolve();
     },
-    toggleTimeSnap: () => {
-      const enabled = !deps.timeline.viewport.snapX;
-      deps.timeline.viewport.snapX = enabled;
-      editorSnapX.set(enabled);
-      deps.persistEditor();
-      deps.invalidate();
-    },
+    toggleNoteSnap: () => toggleTimelineSnap("x"),
+    toggleTimeSnap: () => toggleTimelineSnap("y"),
     showLineInfo: deps.showLineInfo,
     sampleSelection: () => startSamplingForSelection(deps.getSession()),
     resetCamera: deps.resetCamera,
@@ -386,9 +387,10 @@ export function bindEditorInteractions(groups: EditorBindingDependencies) {
     seekBeat: deps.seekBeat,
     stepLine: (direction) => deps.lineSwitcher.step(direction) !== false,
     reportError: deps.reportError,
-    prefixDigitShortcut: {
+    prefixSequenceShortcut: {
       id: LINE_JUMP_SHORTCUT_ID,
       submit: deps.lineJump,
+      tokenOf: deps.lineJumpToken,
     },
   });
   deps.scope.add(

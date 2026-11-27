@@ -71,8 +71,31 @@ interface EventCurveEntry {
 const EMPTY_EVENTS: readonly JudgeLineEvent[] = [];
 const EMPTY_SELECTION = new Set<string>();
 const EMPTY_SELECTED_INDEXES = new Set<number>();
+const EVENT_HEADER_INSET = 1;
 
-/** Draws clipboard events at the current paste target through the event skin. */
+/** Paint one header band; shared column edges use a half inset to expose one line. */
+export function drawEventHeaderBand(
+  context: CanvasRenderingContext2D,
+  labelBatch: TimelineOverlayBatch | null,
+  left: number,
+  width: number,
+  color: string,
+  outerLeft: boolean,
+  outerRight: boolean,
+): void {
+  const leftInset = outerLeft ? EVENT_HEADER_INSET : EVENT_HEADER_INSET / 2;
+  const rightInset = outerRight ? EVENT_HEADER_INSET : EVENT_HEADER_INSET / 2;
+  const fillLeft = left + leftInset;
+  const fillWidth = Math.max(0, width - leftInset - rightInset);
+  if (fillWidth <= 0) {
+    return;
+  }
+  context.fillStyle = color;
+  context.fillRect(fillLeft, 0, fillWidth, 23);
+  labelBatch?.addRect(fillLeft, 0, fillWidth, 23, color);
+}
+
+/** Draws clipboard events on every target panel at the current paste target. */
 function drawClipboardGhostEvents(
   this: TimelineEventDrawingReceiver,
   context: CanvasRenderingContext2D,
@@ -80,41 +103,60 @@ function drawClipboardGhostEvents(
   height: number,
 ): void {
   const session = this.getSession();
-  const targetLine = session.lineIndex;
+  const targetLine = this.gestures.cursorLineIndex ?? session.lineIndex;
   const projection = projectClipboardGhost(this, targetLine);
-  if (!projection) {
+  if (!projection?.events.length) {
     return;
   }
-  const eventTypes = this.viewport.eventTypesForLine(targetLine);
-  if (!eventTypes.length) {
-    return;
-  }
-  const verticalAt = createVerticalAtBeat(this, this.viewport.factorForLine(targetLine), height);
-  const multiLine = session.multiLineActive && session.multiLineMode === "events";
-  const panelWidth = multiLine ? this.viewport.panelWidth(width, "events") : width;
-  const panelOffset = multiLine
-    ? this.viewport.panelIndex(targetLine, "events") * this.viewport.panelStride(width, "events") -
-      this.viewport.multiLineViewportOffset(width, "events")
-    : 0;
+  // Multi-line editing paints one panel per selected line, so the ghost follows
+  // every line the paste targets instead of only the panel under the pointer.
+  // The projection already dropped the lines this view cannot show; a single
+  // field still paints only the active line.
+  const multiArea = session.eventsMode === "multi";
+  const panelWidth = multiArea ? this.viewport.panelWidth(width, "events") : width;
+  const stride = multiArea ? this.viewport.panelStride(width, "events") : 0;
+  const viewportOffset = multiArea ? this.viewport.multiLineViewportOffset(width, "events") : 0;
+  const eventInset = this.viewport.eventInset(panelWidth);
+  const contentWidth = Math.max(1, panelWidth - eventInset * 2);
+  const barRatio = Math.max(0.35, Math.min(1, this.appearance.eventBarWidth ?? 0.82));
+  const lines = new Map<
+    number,
+    { eventTypes: string[]; verticalAt: (beat: number) => number; offset: number }
+  >();
   context.save();
   for (const [index, entry] of projection.events.entries()) {
-    if ((projection.eventLines?.[index] ?? targetLine) !== targetLine) {
+    const lineIndex = projection.eventLines?.[index] ?? targetLine;
+    if (!multiArea && lineIndex !== session.lineIndex) {
       continue;
     }
-    const channel = eventTypes.indexOf(entry.type);
+    let line = lines.get(lineIndex);
+    if (!line) {
+      line = {
+        eventTypes: this.viewport.eventTypesForLine(lineIndex),
+        verticalAt: createVerticalAtBeat(this, this.viewport.factorForLine(lineIndex), height),
+        offset: multiArea
+          ? this.viewport.panelIndex(lineIndex, "events") * stride - viewportOffset + eventInset
+          : 0,
+      };
+      lines.set(lineIndex, line);
+    }
+    const channel = line.eventTypes.indexOf(entry.type);
     if (channel < 0) {
       continue;
     }
-    const column = this.viewport.eventColumnBounds(channel, panelWidth);
-    const top = verticalAt(beatValue(entry.event.endTime));
-    const bottom = verticalAt(beatValue(entry.event.startTime));
+    // Column geometry follows the panel's own track list, so a line that hides
+    // some tracks keeps the same column widths as its committed bars.
+    const channelWidth = contentWidth / line.eventTypes.length;
+    const barWidth = channelWidth * barRatio;
+    const top = line.verticalAt(beatValue(entry.event.endTime));
+    const bottom = line.verticalAt(beatValue(entry.event.startTime));
     if (bottom < 23 || top > height) {
       continue;
     }
     const rectangle = {
-      x: panelOffset + column.x,
+      x: line.offset + channel * channelWidth + (channelWidth - barWidth) / 2,
       y: Math.max(23, top),
-      width: column.width,
+      width: barWidth,
       height: Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
     };
     context.globalAlpha = eventBarOpacity(
@@ -557,9 +599,15 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
     );
     if (type === "paintEvents") {
       this.drawShaderEvents(context, visibleEntries, channel, width, height, selectedIndexes);
-      context.fillStyle = palette.headerSurface;
-      context.fillRect(horizontal, 0, channelWidth, 23);
-      overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
+      drawEventHeaderBand(
+        context,
+        overlayBatch,
+        horizontal,
+        channelWidth,
+        palette.headerSurface,
+        channel === 0,
+        channel === eventTypeCount - 1,
+      );
       const shaderLabel = t("editorPanels.timeline.shaderTrack");
       const shaderX = horizontal + channelWidth / 2;
       drawEventText(
@@ -763,11 +811,18 @@ export function drawEvents(this: TimelineEventDrawingReceiver, playBeat: number)
         valueFont,
       );
     }
-    context.fillStyle = palette.headerSurface;
-    context.fillRect(horizontal, 0, channelWidth, 23);
     // The easing/curve overlay is a GPU layer above this canvas; queue the same
-    // header fill after its curves so easing never covers the column labels.
-    overlayBatch?.addRect(horizontal, 0, channelWidth, 23, palette.headerSurface);
+    // inset header fill after its curves so easing never covers the column labels
+    // or the CSS field edges.
+    drawEventHeaderBand(
+      context,
+      overlayBatch,
+      horizontal,
+      channelWidth,
+      palette.headerSurface,
+      channel === 0,
+      channel === eventTypeCount - 1,
+    );
     const headerLabel = headerLabels[channel];
     if (headerLabel) {
       drawEventText(
@@ -846,7 +901,6 @@ export function drawMultiLineEvents(
     const verticalAt = createVerticalAtBeat(this, lineFactor, height);
     const eventBeatRange = this.viewport.beatRangeForLine(lineIndex, height);
     const offset = panel * panelStride - viewportOffset + eventInset;
-    const contentRight = offset + channelWidth * eventTypes.length;
     const layer: TimelineEventLayer = this.gestures.extended
       ? {
           ...(session.chart.judgeLineList?.[lineIndex]?.extended ?? {}),
@@ -864,13 +918,6 @@ export function drawMultiLineEvents(
         : eventLayerOf(
             session.chart.judgeLineList?.[lineIndex]?.eventLayers?.[this.gestures.layer],
           );
-    if (!eventTypes.length) {
-      // Every ordinary track is hidden. Keep the panel edges so the field still
-      // reads as one empty multi-line panel instead of an unclipped void.
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      strokeVerticalGrid(separators, Math.max(0.5, offset), height);
-      strokeVerticalGrid(separators, Math.min(width - 0.5, offset + contentWidth), height);
-    }
     const lineSelection =
       session.multiEventSelection?.get(lineIndex) ??
       (lineIndex === session.lineIndex ? session.eventSelection : EMPTY_SELECTION);
@@ -879,15 +926,11 @@ export function drawMultiLineEvents(
       context.globalAlpha = lineOpacity;
       const barX = offset + channel * channelWidth + (channelWidth - barWidth) / 2;
       const channelBoundary = offset + channel * channelWidth;
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      if (channel === 0) {
+      separators.lineWidth = 1;
+      if (channel > 0) {
         separators.strokeStyle = this.appearance.verticalGridColor;
-        strokeVerticalGrid(separators, Math.max(0.5, offset), height);
-        separators.strokeStyle = this.appearance.verticalGridColor;
-        strokeVerticalGrid(separators, Math.min(width - 0.5, contentRight), height);
+        strokeVerticalGrid(separators, channelBoundary, height);
       }
-      separators.strokeStyle = this.appearance.verticalGridColor;
-      strokeVerticalGrid(separators, channelBoundary, height);
       const events = layer[type] ?? EMPTY_EVENTS;
       const display = this.cache.eventDisplay(session.chart, events);
       const { ranges } = display;
@@ -1115,15 +1158,6 @@ export function drawMultiLineEvents(
     });
     separators.globalAlpha = 1;
     context.globalAlpha = 1;
-    if (this.viewport.panelCount("events") > 1) {
-      separators.strokeStyle = palette.outline;
-      separators.lineWidth = 2;
-      separators.beginPath();
-      separators.moveTo(offset + panelWidth, 0);
-      separators.lineTo(offset + panelWidth, height);
-      separators.stroke();
-      separators.lineWidth = 1;
-    }
   }
   context.globalAlpha = 1;
   context.lineWidth = 1;

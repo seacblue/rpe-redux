@@ -38,6 +38,9 @@ import { layout as layoutApi } from "./layout.ts";
 import { theme as themeApi } from "./theme.ts";
 import { workspace as workspaceApi } from "./workspace.ts";
 import { help as helpApi } from "./help.ts";
+import { persistence as persistenceApi } from "./persistence.ts";
+import { shader as shaderApi } from "./shader.ts";
+import { noteFieldApi as noteFieldsApi } from "./noteFields.ts";
 import { BUILD_APP_VERSION } from "../platform/buildInfo.ts";
 import { guardDevFacade } from "../dev/apiGuard.ts";
 
@@ -62,6 +65,9 @@ export const layout = layoutApi;
 export const theme = themeApi;
 export const workspace = workspaceApi;
 export const help = helpApi;
+export const persistence = persistenceApi;
+export const shader = shaderApi;
+export const noteFields = noteFieldsApi;
 
 /** The complete host facade shared by every public handle. */
 export const redux = Object.freeze({
@@ -90,6 +96,9 @@ export const redux = Object.freeze({
   theme,
   workspace,
   help,
+  persistence,
+  shader,
+  noteFields,
 });
 
 /** The complete public facade type; feature contracts stay with their handles. */

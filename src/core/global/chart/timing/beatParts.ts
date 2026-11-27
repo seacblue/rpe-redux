@@ -39,6 +39,8 @@ export interface BeatPartsRules {
   partsOf(beat: readonly number[]): Parts;
   /** The stored beat three box values describe, or `null` when they are not a beat. */
   reduce(parts: Parts): Beat | null;
+  /** Read integer box parts without reducing them, or `null` when they are invalid. */
+  preserve?(parts: Parts): Beat | null;
   /** The three parts a whole beat typed into one box describes, or `null`. */
   parseShorthand(text: string): Parts | null;
 }
@@ -129,9 +131,32 @@ export function draftBeat(parts: Parts): Beat | null {
   }
 }
 
+/** Read integer box parts without reducing their numerator or denominator. */
+export function preserveBeatParts(parts: Parts): Beat | null {
+  const values = parts.map(fractionOf);
+  const [whole, numerator, denominator] = values;
+  if (
+    !whole ||
+    !numerator ||
+    !denominator ||
+    whole.denominator !== 1n ||
+    numerator.denominator !== 1n ||
+    denominator.denominator !== 1n ||
+    denominator.numerator <= 0n
+  ) {
+    return draftBeat(parts);
+  }
+  const raw = values.map((value) => Number(value?.numerator)) as Beat;
+  if (!raw.every(Number.isSafeInteger)) {
+    return null;
+  }
+  return nonNegativeBeat(raw);
+}
+
 /** The chart's own box rules, for the beat field that draws them. */
 export const BEAT_PARTS_RULES: BeatPartsRules = {
   partsOf,
   reduce: draftBeat,
+  preserve: preserveBeatParts,
   parseShorthand: partsFromText,
 };

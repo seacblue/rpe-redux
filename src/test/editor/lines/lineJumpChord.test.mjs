@@ -8,9 +8,9 @@ import {
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { released } from "../../../core/shortcuts/keyMatching.ts";
 import {
-  advancePrefixDigitSequence,
-  createPrefixDigitSequenceState,
-} from "../../../core/shortcuts/prefixDigitSequence.ts";
+  advancePrefixSequence,
+  createPrefixSequenceState,
+} from "../../../core/shortcuts/prefixSequence.ts";
 import {
   advanceShortcutCapture,
   createShortcutCaptureState,
@@ -33,15 +33,15 @@ const editorContext = {
   samplingActive: false,
 };
 
-test("Ctrl prefix accumulates digits and submits a zero-based line index on release", () => {
-  let state = createPrefixDigitSequenceState();
-  state = advancePrefixDigitSequence(
+test("Ctrl prefix accumulates physical digit tokens and submits them on release", () => {
+  let state = createPrefixSequenceState();
+  state = advancePrefixSequence(
     state,
     { type: "keydown", event: { key: "Control", code: "ControlLeft", ctrlKey: true } },
     "CTRL",
   ).state;
   for (const digit of ["0", "0", "7"]) {
-    const transition = advancePrefixDigitSequence(
+    const transition = advancePrefixSequence(
       state,
       { type: "keydown", event: { key: digit, code: `Digit${digit}`, ctrlKey: true } },
       "CTRL",
@@ -50,19 +50,22 @@ test("Ctrl prefix accumulates digits and submits a zero-based line index on rele
     state = transition.state;
   }
 
-  const released = advancePrefixDigitSequence(
+  const released = advancePrefixSequence(
     state,
     { type: "keyup", event: { key: "Control", code: "ControlLeft" } },
     "CTRL",
   );
-  assert.deepEqual(released.submission, { kind: "number", value: 7 });
-  assert.deepEqual(released.state, createPrefixDigitSequenceState());
+  assert.deepEqual(released.submission, {
+    kind: "tokens",
+    tokens: ["DIGIT0", "DIGIT0", "DIGIT7"],
+  });
+  assert.deepEqual(released.state, createPrefixSequenceState());
 });
 
 test("empty, modified, repeated, and oversized input never becomes an accidental jump", () => {
-  const empty = advancePrefixDigitSequence(
-    advancePrefixDigitSequence(
-      createPrefixDigitSequenceState(),
+  const empty = advancePrefixSequence(
+    advancePrefixSequence(
+      createPrefixSequenceState(),
       { type: "keydown", event: { key: "Control", ctrlKey: true } },
       "CTRL",
     ).state,
@@ -71,9 +74,9 @@ test("empty, modified, repeated, and oversized input never becomes an accidental
   );
   assert.deepEqual(empty.submission, { kind: "empty" });
 
-  const modified = advancePrefixDigitSequence(
-    advancePrefixDigitSequence(
-      createPrefixDigitSequenceState(),
+  const modified = advancePrefixSequence(
+    advancePrefixSequence(
+      createPrefixSequenceState(),
       { type: "keydown", event: { key: "Control", ctrlKey: true } },
       "CTRL",
     ).state,
@@ -83,24 +86,73 @@ test("empty, modified, repeated, and oversized input never becomes an accidental
   assert.equal(modified.state.active, false);
   assert.equal(modified.handled, false);
 
-  let state = advancePrefixDigitSequence(
-    createPrefixDigitSequenceState(),
+  let state = advancePrefixSequence(
+    createPrefixSequenceState(),
     { type: "keydown", event: { key: "Control", ctrlKey: true } },
     "CTRL",
   ).state;
   for (let index = 0; index < 7; index += 1) {
-    state = advancePrefixDigitSequence(
+    state = advancePrefixSequence(
       state,
       { type: "keydown", event: { key: "1", code: "Digit1", ctrlKey: true } },
       "CTRL",
     ).state;
   }
-  const oversized = advancePrefixDigitSequence(
+  const oversized = advancePrefixSequence(
     state,
     { type: "keyup", event: { key: "Control" } },
     "CTRL",
   );
   assert.deepEqual(oversized.submission, { kind: "invalid" });
+});
+
+test("the prefix sequence is not coupled to numeric input", () => {
+  let state = advancePrefixSequence(
+    createPrefixSequenceState(),
+    { type: "keydown", event: { key: "Control", ctrlKey: true } },
+    "CTRL",
+  ).state;
+  state = advancePrefixSequence(
+    state,
+    { type: "keydown", event: { key: "a", code: "KeyA", ctrlKey: true } },
+    "CTRL",
+  ).state;
+  const released = advancePrefixSequence(
+    state,
+    { type: "keyup", event: { key: "Control" } },
+    "CTRL",
+  );
+  assert.deepEqual(released.submission, { kind: "tokens", tokens: ["A"] });
+});
+
+test("a caller can restrict the generic sequence to physical digit tokens", () => {
+  const digitToken = (event) => {
+    const key = event.code?.startsWith("Numpad")
+      ? `NUMPAD${event.code.slice("Numpad".length)}`
+      : event.code?.startsWith("Digit")
+        ? `DIGIT${event.code.slice("Digit".length)}`
+        : null;
+    return key && /^(?:DIGIT|NUMPAD)[0-9]$/.test(key) ? key : null;
+  };
+  let state = advancePrefixSequence(
+    createPrefixSequenceState(),
+    { type: "keydown", event: { key: "Control", ctrlKey: true } },
+    "CTRL",
+    digitToken,
+  ).state;
+  state = advancePrefixSequence(
+    state,
+    { type: "keydown", event: { key: "1", code: "Numpad1", ctrlKey: true } },
+    "CTRL",
+    digitToken,
+  ).state;
+  const released = advancePrefixSequence(
+    state,
+    { type: "keyup", event: { key: "Control" } },
+    "CTRL",
+    digitToken,
+  );
+  assert.deepEqual(released.submission, { kind: "tokens", tokens: ["NUMPAD1"] });
 });
 
 test("bare Ctrl is recordable, releasable, and passive in the normal dispatcher", () => {

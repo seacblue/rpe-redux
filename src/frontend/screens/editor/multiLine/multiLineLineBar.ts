@@ -9,6 +9,10 @@
  */
 import type { EditorLineOption } from "../../../../core/edit/state/publishedValues.ts";
 import {
+  listSelectionAfterClick,
+  type ListSelectionModifiers,
+} from "../../../../design/patterns/list/listSelection.ts";
+import {
   addLineSelection,
   resolveLineSelection,
   subtractLineSelection,
@@ -37,7 +41,12 @@ export interface MultiLineLineBarState {
   current: number;
   selection: number[];
   tokens: LineSelectionToken[];
+  firstLine: number | null;
+  focus: number | null;
 }
+
+/** Pointer modifiers accepted by a judge-line list row. */
+export type LineBarSelectionModifiers = ListSelectionModifiers;
 
 /** Pick the remaining line nearest a removed one, keeping the current line when possible. */
 function focusAfterRemoval(next: readonly number[], removed: number, current: number): number {
@@ -91,53 +100,93 @@ export function buildMultiLineLineBarItems(
  * Resolve one click on a line row using the toolbar contract.
  *
  * A plain click replaces the selection with the clicked line. Shift-click
- * toggles only the clicked line: adding appends it to the authored expression,
- * and removing splits the token that owns it in place. The selection never
- * becomes empty, and a removal keeps the current line inside the remaining
- * selection when it can.
+ * replaces it with the range from the fixed first line to the clicked line and
+ * moves focus to the clicked line. Ctrl/Cmd-click toggles only the clicked line.
+ * The selection never becomes empty, and a removal keeps the current line
+ * inside the remaining selection when it can.
  */
 export function lineBarSelectionAfterClick(
   current: number,
   selection: readonly number[],
   clicked: number,
-  toggle: boolean,
+  toggle: boolean | LineBarSelectionModifiers,
   tokens: readonly LineSelectionToken[] = tokensFromLines(selection),
   available: readonly number[] = [...new Set([...selection, clicked])],
   groups: readonly LineSelectionGroup[] = [],
+  firstLine: number | null | undefined = current,
 ): MultiLineLineBarState {
   const focus = Number.isInteger(current) && current >= 0 ? current : clicked;
   const known = available.length ? available : [...new Set([...selection, clicked])];
   const base = tokensForSelection(tokens, selection, known, groups);
+  const rangeStart = firstLine ?? focus;
   if (!Number.isInteger(clicked) || clicked < 0) {
-    return { current: focus, selection: [...selection], tokens: base };
+    return {
+      current: focus,
+      selection: [...selection],
+      tokens: base,
+      firstLine: firstLine ?? focus,
+      focus,
+    };
   }
-  if (!toggle) {
+  const modifiers: LineBarSelectionModifiers =
+    typeof toggle === "boolean" ? { ctrlKey: toggle } : toggle;
+  const selected = new Set(selection);
+  const result = listSelectionAfterClick(known, selected, rangeStart, clicked, modifiers, true);
+  if (!modifiers.shiftKey && !modifiers.ctrlKey && !modifiers.metaKey) {
     return {
       current: clicked,
       selection: [clicked],
       tokens: [{ kind: "line", line: clicked }],
+      firstLine: clicked,
+      focus: clicked,
     };
   }
-  if (selection.includes(clicked)) {
-    if (selection.length <= 1) {
-      return { current: clicked, selection: [...selection], tokens: base };
+  if (modifiers.shiftKey) {
+    const nextTokens = tokensFromLines(result.selection);
+    return {
+      current: clicked,
+      selection: result.selection,
+      tokens: nextTokens.length ? nextTokens : base,
+      firstLine: firstLine ?? rangeStart,
+      focus: clicked,
+    };
+  }
+  if (selected.has(clicked)) {
+    if (selected.size <= 1) {
+      return {
+        current: clicked,
+        selection: [...selection],
+        tokens: base,
+        firstLine: clicked,
+        focus: clicked,
+      };
     }
     const nextTokens = subtractLineSelection(base, [clicked], known, groups);
     const next = resolveLineSelection(nextTokens, known, groups);
     if (!next.length) {
-      return { current: clicked, selection: [...selection], tokens: base };
+      return {
+        current: clicked,
+        selection: [...selection],
+        tokens: base,
+        firstLine: clicked,
+        focus: clicked,
+      };
     }
     return {
-      current: focusAfterRemoval(next, clicked, focus),
+      current: result.focus ?? focusAfterRemoval(next, clicked, focus),
       selection: next,
       tokens: nextTokens,
+      firstLine: clicked,
+      focus: result.focus ?? focusAfterRemoval(next, clicked, focus),
     };
   }
   const nextTokens = addLineSelection(base, [clicked], known, groups);
   return {
     current: clicked,
-    selection: resolveLineSelection(nextTokens, known, groups),
+    selection: resolveLineSelection(nextTokens, known, groups) || result.selection,
     tokens: nextTokens,
+    firstLine: clicked,
+    focus: clicked,
   };
 }
 

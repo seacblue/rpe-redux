@@ -33,19 +33,22 @@ import type { EditorSession } from "../../../../../core/edit/session/session.ts"
 import {
   captureSelection,
   type NoteCaptureEntry,
+  type SelectionSnapshot,
 } from "../../../../../core/edit/selection/snapshot.ts";
 import {
   commitSelectionEdit,
   editCapturedSelection,
 } from "../../../../../core/edit/selection/edits.ts";
 import { timelineDragPreview } from "../../../../../core/edit/timeline/dragPreviewState.ts";
-import {
-  defaultHitSound,
-  isBuiltInHitSound,
-  noteHitSound,
-} from "../../../../../core/media/hitTimeline.ts";
+import { isBuiltInHitSound, noteHitSound } from "../../../../../core/media/hitTimeline.ts";
 import { getLanguage, t } from "../../../../../i18n/index.ts";
-import { type NotesInspectorState, type NotePropertyField, type PropertyControl } from "./model.ts";
+import {
+  type NoteHitSoundOptions,
+  type NotesInspectorState,
+  type NotePropertyField,
+  type PropertyControl,
+} from "./model.ts";
+import { noteFields } from "../../../../../core/global/chart/noteFields.ts";
 
 type FieldName =
   | "type"
@@ -106,6 +109,8 @@ interface PropertiesRenderContext {
   multiLineMode: string;
   language: string;
   entries: NoteCaptureEntry[];
+  hitSoundNames: string[];
+  noteFieldRevision: number;
 }
 
 /**
@@ -116,6 +121,35 @@ interface PropertiesRenderContext {
  * only wakes React for another identical render.
  */
 const renderContexts = new WeakMap<NotesInspectorState, PropertiesRenderContext>();
+const draftSelections = new WeakMap<EditorSession, SelectionSnapshot>();
+
+/** Remember the chart objects targeted by a note Inspector draft. */
+export function captureNoteDraftSelection(session: EditorSession): void {
+  const snapshot = captureSelection(session);
+  if (snapshot.notes.length) {
+    draftSelections.set(session, snapshot);
+  }
+}
+
+/** Drop the note draft target after its final scoped commit has run. */
+export function clearNoteDraftSelection(session: EditorSession): void {
+  draftSelections.delete(session);
+}
+
+/** Rebase a saved draft target onto the session's latest chart. */
+function currentDraftSelection(session: EditorSession): SelectionSnapshot | null {
+  const saved = draftSelections.get(session);
+  if (!saved) {
+    return null;
+  }
+  const notes = saved.notes
+    .map((entry) => {
+      const note = session.chart.judgeLineList?.[entry.lineIndex]?.notes?.[entry.index];
+      return note ? { ...entry, note } : null;
+    })
+    .filter((entry): entry is NoteCaptureEntry => Boolean(entry));
+  return notes.length ? { ...saved, chart: session.chart, notes } : null;
+}
 
 /** Compares two note selections by line, index, and note identity. */
 function sameEntries(left: NoteCaptureEntry[], right: NoteCaptureEntry[]): boolean {
@@ -128,6 +162,11 @@ function sameEntries(left: NoteCaptureEntry[], right: NoteCaptureEntry[]): boole
         entry.note === right[index]?.note,
     )
   );
+}
+
+/** Compares project hit-sound names without making asset-map order observable. */
+function sameNames(left: string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((name, index) => name === right[index]);
 }
 
 /** Clears the cached render context and the published property snapshot. */
@@ -160,7 +199,17 @@ function applyNoteTransform(
   session: EditorSession,
   label: string,
   transform: (note: JudgeLineNote, entry?: NoteCaptureEntry) => JudgeLineNote,
+  draftSelection?: SelectionSnapshot | null,
 ): void {
+  if (draftSelection) {
+    const result = editCapturedSelection(draftSelection, { note: transform });
+    if (result.chart !== session.chart) {
+      // Keep the user's current selection state. The timeline may have cleared
+      // it before the Inspector close lifecycle gets a chance to flush.
+      session.commitChart(label, result.chart, session.selectionState(), {}, { normalized: true });
+    }
+    return;
+  }
   if (session.multiLineActive && session.multiLineMode === "notes") {
     const result = editCapturedSelection(captureSelection(session), { note: transform });
     commitSelectionEdit(session, result, label, {}, { normalized: true });
@@ -179,6 +228,10 @@ export function renderProperties(
   nudgeBeatInput: (value: Beat, direction: number) => Beat | null = () => null,
   // Structural changes may need to publish while a control still owns focus.
   forceRefresh = false,
+  hitSoundOptions: NoteHitSoundOptions = {
+    names: () => [],
+    add: async () => null,
+  },
 ): void {
   if (session.noteDraftActive && !forceRefresh) {
     return;
@@ -186,6 +239,7 @@ export function renderProperties(
   const entries = selectedNoteEntries(session);
   const language = getLanguage();
   const previous = renderContexts.get(state);
+  const hitSoundNames = [...hitSoundOptions.names()];
   if (
     previous &&
     previous.chart === session.chart &&
@@ -195,7 +249,9 @@ export function renderProperties(
     previous.multiLineActive === session.multiLineActive &&
     previous.multiLineMode === session.multiLineMode &&
     previous.language === language &&
-    sameEntries(previous.entries, entries)
+    sameEntries(previous.entries, entries) &&
+    sameNames(previous.hitSoundNames, hitSoundNames) &&
+    previous.noteFieldRevision === noteFields.getRevision()
   ) {
     return;
   }
@@ -208,6 +264,8 @@ export function renderProperties(
     multiLineMode: session.multiLineMode,
     language,
     entries,
+    hitSoundNames,
+    noteFieldRevision: noteFields.getRevision(),
   });
   state.selectedCount.set(entries.length);
   const selectedEntry = entries[0];
@@ -237,7 +295,7 @@ export function renderProperties(
       ["isFake", t("editorPanels.inspector.field.isFake"), "boolean"],
       ["speed", t("editorPanels.inspector.field.speed"), "number", 1],
       ["size", t("editorPanels.inspector.field.size"), "number", 1],
-      ["alpha", t("editorPanels.inspector.field.alpha"), "slider", 255],
+      ["alpha", t("editorPanels.inspector.field.alpha"), "number", 255],
       ["yOffset", t("editorPanels.inspector.field.yOffset"), "number", 0],
       ["visibleTime", t("editorPanels.inspector.field.visibleTime"), "duration", 999999],
       ["hitSound", t("editorPanels.inspector.field.hitSound"), "text"],
@@ -256,6 +314,7 @@ export function renderProperties(
               : 1;
       const focus = () => {
         session.noteDraftActive = true;
+        captureNoteDraftSelection(session);
       };
       const blur = () => {
         session.noteDraftActive = false;
@@ -295,6 +354,7 @@ export function renderProperties(
                       : beatCopy(next),
                 };
               },
+              currentDraftSelection(session),
             );
           } catch (error) {
             reportError(error);
@@ -328,10 +388,43 @@ export function renderProperties(
       if (key === "color" || key === "hitSound") {
         const tinted = note as JudgeLineNote & { color?: unknown; tint?: unknown };
         const present = key === "color" ? noteHasColor(note) : noteHasHitSound(note);
-        // The field shows the effective sound: an authored custom sound, or the
-        // one the note type selects. A type change therefore updates it at once.
-        const hitSound =
-          key === "hitSound" ? (noteHitSound(note) ?? defaultHitSound(note.type)) : "";
+        const authoredHitSound = key === "hitSound" ? noteHitSound(note) : undefined;
+        const defaultValue = "__redux_default_hit_sound__";
+        const addValue = "__redux_add_hit_sound__";
+        const selectedHitSound =
+          authoredHitSound && !isBuiltInHitSound(authoredHitSound)
+            ? authoredHitSound
+            : defaultValue;
+        const hitSoundChoices =
+          key === "hitSound"
+            ? [
+                [defaultValue, t("editorPanels.inspector.hitSoundDefault")] as [string, string],
+                ...[
+                  ...new Set([
+                    ...hitSoundNames,
+                    ...(authoredHitSound && !isBuiltInHitSound(authoredHitSound)
+                      ? [authoredHitSound]
+                      : []),
+                  ]),
+                ].map((name) => [name, name] as [string, string]),
+                [addValue, t("editorPanels.inspector.hitSoundAdd")] as [string, string],
+              ]
+            : undefined;
+        const applySound = (value: string, control?: PropertyControl) => {
+          const customSound = value === defaultValue ? "" : value.trim();
+          applyNoteTransform(
+            session,
+            t("editorPanels.inspector.modify", { field: label }),
+            (current) => {
+              const next = { ...current, hitSound: customSound || undefined };
+              delete (next as Record<string, unknown>).hitsound;
+              return next;
+            },
+          );
+          if (control) {
+            control.value = value;
+          }
+        };
         const apply = (control: PropertyControl) => {
           try {
             if (key === "color") {
@@ -352,32 +445,50 @@ export function renderProperties(
               );
               return;
             }
-            const customSound = control.value.trim();
-            applyNoteTransform(
-              session,
-              t("editorPanels.inspector.modify", { field: label }),
-              (current) => {
-                const next = { ...current, hitSound: customSound || undefined };
-                delete (next as Record<string, unknown>).hitsound;
-                return next;
-              },
-            );
+            if (control.value === addValue) {
+              void hitSoundOptions
+                .add()
+                .then((name) => {
+                  if (name) {
+                    applySound(name, control);
+                    renderProperties(
+                      session,
+                      state,
+                      tempo,
+                      reportError,
+                      nudgeBeatInput,
+                      true,
+                      hitSoundOptions,
+                    );
+                  } else {
+                    control.value = selectedHitSound;
+                  }
+                })
+                .catch((error) => {
+                  control.value = selectedHitSound;
+                  reportError(error);
+                });
+              return;
+            }
+            applySound(control.value, control);
           } catch (error) {
             reportError(error);
-            control.value = key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound;
+            control.value =
+              key === "color" ? colorHex(tinted.color ?? tinted.tint) : selectedHitSound;
           }
         };
         fields.push({
           key,
           label,
-          kind: key === "color" ? "color" : "text",
-          preservesDraft: key === "hitSound",
-          value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : hitSound,
+          kind: key === "color" ? "color" : "select",
+          preservesDraft: false,
+          value: key === "color" ? colorHex(tinted.color ?? tinted.tint) : selectedHitSound,
+          options: hitSoundChoices,
+          selectTone: key === "hitSound" && selectedHitSound === defaultValue ? "muted" : undefined,
           present,
-          placeholder:
-            key === "color" ? "#RRGGBB" : t("editorPanels.inspector.hitSoundPlaceholder"),
+          placeholder: key === "color" ? "#RRGGBB" : undefined,
           dirty: present,
-          reset: () => apply({ value: "" }),
+          reset: () => apply({ value: key === "color" ? "" : defaultValue }),
           apply,
           focus,
           blur,
@@ -500,7 +611,7 @@ export function renderProperties(
               ? (options as [string, string][])
               : Object.entries((options ?? {}) as Record<string, string>)
             : undefined,
-        step: kind === "number" || kind === "slider" ? step : undefined,
+        step: kind === "number" ? step : undefined,
         min: key === "size" ? String(0.01) : key === "alpha" || duration ? String(0) : undefined,
         max: key === "alpha" ? String(255) : undefined,
         present,
@@ -526,6 +637,44 @@ export function renderProperties(
               return control.value;
             }
           : undefined,
+      });
+    }
+    for (const definition of noteFields.list()) {
+      if (fields.some((field) => field.key === definition.field)) {
+        continue;
+      }
+      const authored = (note as Record<string, unknown>)[definition.field];
+      const value = authored === undefined || authored === null ? "" : String(authored);
+      const present = value !== "";
+      const apply = (control: PropertyControl) => {
+        applyNoteTransform(
+          session,
+          t("editorPanels.inspector.modify", { field: definition.label }),
+          (current) => {
+            const next = { ...current } as Record<string, unknown>;
+            if (control.value === "" || control.value === String(definition.clearValue ?? "")) {
+              delete next[definition.field];
+            } else {
+              next[definition.field] =
+                definition.kind === "number" ? Number(control.value) : control.value;
+            }
+            return next as JudgeLineNote;
+          },
+        );
+      };
+      fields.push({
+        key: definition.field,
+        label: definition.label,
+        kind: definition.kind,
+        value,
+        preservesDraft: definition.kind !== "select",
+        options: definition.options?.map(([option, optionLabel]) => [option, optionLabel]),
+        present,
+        dirty: present,
+        reset: () => apply({ value: "" }),
+        apply,
+        focus,
+        blur,
       });
     }
   }

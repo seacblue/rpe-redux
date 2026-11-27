@@ -265,11 +265,12 @@ export function createCurveEditor(deps: CurveEditorDependencies) {
   }
 
   /**
-   * Starts or advances a quick pick from a Ctrl+clicked note.
+   * Starts or advances a quick pick from a note clicked with the configured
+   * configured curve-generation modifier.
    *
    * The first note is the start and puts the editor in end-pick mode; the next
-   * note completes the draft. A Ctrl+click after both anchors starts a new
-   * curve, so repeated Ctrl+clicks never merge two intended selections.
+   * note completes the draft. A configured-modifier click after both anchors
+   * starts a new curve, so repeated clicks never merge two intended selections.
    */
   function quickPick(note: TimelineNote, _index?: number, lineIndex?: number): boolean {
     if (!open) {

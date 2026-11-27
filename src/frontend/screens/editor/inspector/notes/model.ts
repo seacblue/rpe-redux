@@ -12,12 +12,20 @@ export interface PropertyControl {
   value: string;
 }
 
+/** Supplies project audio choices and imports one new hit-sound asset. */
+export interface NoteHitSoundOptions {
+  names(): readonly string[];
+  add(): Promise<string | null>;
+}
+
 export interface NotePropertyField {
   key: string;
   label: string;
-  kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean" | "slider";
+  kind: "select" | "beat" | "number" | "duration" | "text" | "color" | "boolean";
   /** Text value of a select, number, duration or text control; empty for a beat control. */
   value: string;
+  /** Optional tone for a select's current option, such as a muted default entry. */
+  selectTone?: "muted";
   /** Whether a focused control owns a local draft that a session refresh must preserve. */
   preservesDraft: boolean;
   /** True when the chart already authors this optional value, so hiding can keep it editable. */

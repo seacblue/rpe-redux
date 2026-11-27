@@ -505,6 +505,62 @@ function projectedBeatRange(projected: ClipboardProjection): ClipboardBeatRange 
   return Number.isFinite(start) && Number.isFinite(end) ? { start, end } : null;
 }
 
+/** A timeline field that can receive a paste. */
+export type ClipboardArea = "notes" | "events";
+
+/**
+ * The judge lines one timeline area paints, or null when it paints every line.
+ *
+ * Multi-line presentation shows only its selected lines, so a paste writes the
+ * tracks its preview draws. An entry mapped outside that set would otherwise
+ * land on a judge line the user never saw.
+ */
+export function visibleClipboardLines(
+  session: EditorSession,
+  area: ClipboardArea,
+): ReadonlySet<number> | null {
+  const multi = area === "notes" ? session.notesMode !== "single" : session.eventsMode === "multi";
+  return multi ? new Set(session.multiLineIndices) : null;
+}
+
+/**
+ * Drop the projected entries the visible fields cannot show.
+ *
+ * The paste anchor and every relative offset are already resolved, so dropping
+ * an entry never shifts the rest of the block. A field that paints every line
+ * keeps its whole projection.
+ */
+export function clipProjectionToVisibleLines(
+  session: EditorSession,
+  projected: ClipboardProjection,
+): void {
+  const noteLines = visibleClipboardLines(session, "notes");
+  const projectedNoteLines = projected.noteLines;
+  if (noteLines && projectedNoteLines) {
+    const keep = projected.notes.flatMap((unused, index) =>
+      noteLines.has(projectedNoteLines[index]) ? [index] : [],
+    );
+    if (keep.length !== projected.notes.length) {
+      projected.notes = keep.map((index) => projected.notes[index]);
+      projected.noteLines = keep.map((index) => projectedNoteLines[index]);
+    }
+  }
+  const eventLines = visibleClipboardLines(session, "events");
+  const projectedEventLines = projected.eventLines;
+  if (!eventLines || !projectedEventLines) {
+    return;
+  }
+  const keep = projected.events.flatMap((unused, index) =>
+    eventLines.has(projectedEventLines[index]) ? [index] : [],
+  );
+  if (keep.length === projected.events.length) {
+    return;
+  }
+  projected.events = keep.map((index) => projected.events[index]);
+  projected.eventLines = keep.map((index) => projectedEventLines[index]);
+  projected.eventLayers = keep.map((index) => projected.eventLayers?.[index] ?? session.eventLayer);
+}
+
 /** Inserts the projected clipboard as one history entry; false when empty. */
 export function pasteObjects(
   session: EditorSession,
@@ -512,6 +568,7 @@ export function pasteObjects(
   options: ClipboardOptions = {},
 ): boolean {
   const projected = structuredClone(projectClipboard(session, beat, options));
+  clipProjectionToVisibleLines(session, projected);
   if (!projected.notes.length && !projected.events.length) {
     return false;
   }

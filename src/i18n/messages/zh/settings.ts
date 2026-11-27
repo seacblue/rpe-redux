@@ -70,6 +70,12 @@ export default {
   "settings.group.editingNoteFeatures": "音符属性",
   "settings.group.editingEventFeatures": "事件属性",
   "settings.group.editingLineFeatures": "判定线属性",
+  "settings.group.editingShaderFeatures": "工作区 Shader 导出",
+  "settings.field.workspace-shader-export-mode.label": "导出模式",
+  "settings.field.workspace-shader-export-mode.description":
+    "分层模式保留 Redux 与 PhiZone 的语义 mask；独立模式使用插件提供的兼容 Shader，供不支持内置分层的播放器使用。",
+  "settings.option.workspace-shader-export-mode.layered": "分层（无损元数据）",
+  "settings.option.workspace-shader-export-mode.standalone": "独立（便携兼容）",
 
   "settings.field.editing-note-speed-enabled.label": "音符速度",
   "settings.field.editing-note-y-offset-enabled.label": "Y 偏移",

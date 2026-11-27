@@ -5,10 +5,15 @@
  * These pieces render outside the scrolling list but belong to the same panel,
  * so they take their already-computed state and emit intents upward.
  */
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { Button } from "../../../../../design/components/button/Button.tsx";
 import { Icon } from "../../../../../design/components/icon/Icon.tsx";
 import { t } from "../../../../../i18n/index.ts";
+import { readTimelineNoteMarqueeColors } from "../../../editor/canvas/palette.ts";
 
 interface LineTreeFooterProps {
   deleteEnabled: boolean;
@@ -81,10 +86,20 @@ export function LineTreeMarqueeBox({ box }: LineTreeMarqueeBoxProps) {
   if (!box) {
     return null;
   }
+  const colors = readTimelineNoteMarqueeColors();
   return (
     <div
       className="line-tree-marquee"
-      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+      style={
+        {
+          left: box.left,
+          top: box.top,
+          width: box.width,
+          height: box.height,
+          "--line-selection-marquee-fill": colors.fill,
+          "--line-selection-marquee-stroke": colors.stroke,
+        } as CSSProperties
+      }
       aria-hidden="true"
     />
   );

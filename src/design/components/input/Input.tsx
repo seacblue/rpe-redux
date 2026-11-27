@@ -18,7 +18,7 @@ import {
 } from "react";
 import { Icon } from "../icon/Icon.tsx";
 import { useTranslation } from "../../../i18n/react.ts";
-import { ratioOf, readoutText, writeRangeValueAtPointer } from "../../controls/sliderMode.ts";
+import { ratioOf, readoutText } from "../../controls/sliderMode.ts";
 import { writeInputValue } from "../../controls/nativeValue.ts";
 import { useSelectAllOnClick } from "./useSelectAllOnClick.ts";
 import {
@@ -211,10 +211,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   const [manualText, setManualText] = useState("");
   const manualField = useRef<HTMLInputElement>(null);
   const manualDone = useRef(false);
-  /** The pointer that owns a range drag and whether it has written a new value. */
-  const rangeDrag = useRef<{ pointerId: number; changed: boolean } | null>(null);
-  /** Detaches window safety-net listeners when a range drag ends. */
-  const rangeDragCleanup = useRef<(() => void) | null>(null);
   const [decorationBounds, setDecorationBounds] = useState({
     left: 0,
     top: 0,
@@ -361,104 +357,6 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   }, [isLevelRange, isStepper, manualEntry]);
 
   useEffect(() => stopHold, []);
-
-  /**
-   * Finish a range drag once: detach the fallback, release capture, and report
-   * one change when the drag wrote at least one new value.
-   */
-  const endRangeDrag = (pointerId?: number): void => {
-    const drag = rangeDrag.current;
-    if (!drag || (pointerId !== undefined && drag.pointerId !== pointerId)) {
-      return;
-    }
-    rangeDrag.current = null;
-    rangeDragCleanup.current?.();
-    rangeDragCleanup.current = null;
-    const input = element.current;
-    if (input) {
-      try {
-        if (input.hasPointerCapture(drag.pointerId)) {
-          input.releasePointerCapture(drag.pointerId);
-        }
-      } catch {
-        /* The pointer may already be gone. */
-      }
-    }
-    if (drag.changed && input) {
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  };
-
-  /** Follow an active range drag with the pointer's current x-coordinate. */
-  const moveRangeDrag = (pointerId: number, clientX: number): void => {
-    const drag = rangeDrag.current;
-    const input = element.current;
-    if (!drag || drag.pointerId !== pointerId || !input) {
-      return;
-    }
-    if (writeRangeValueAtPointer(input, clientX)) {
-      drag.changed = true;
-    }
-  };
-
-  /**
-   * Take over a range drag from the native control.
-   *
-   * The native thumb stops updating once the pointer leaves the control, and its
-   * rail ends are inset from the border, so dragging to an end is unreliable.
-   * Capturing the pointer keeps the drag live across the rest of the window.
-   * Window listeners remain attached as a second safety net because WebViews
-   * can lose capture when the pointer crosses native or overlay surfaces.
-   */
-  const beginRangeDrag = (event: ReactPointerEvent<HTMLInputElement>): void => {
-    const input = event.currentTarget;
-    if (input.type !== "range" || event.button !== 0 || input.disabled || input.readOnly) {
-      return;
-    }
-    // Suppressing the native press also suppresses its drag and click-to-set;
-    // the value write below replaces both.
-    event.preventDefault();
-    // Keep the keyboard path alive: a prevented native press would not focus.
-    input.focus({ preventScroll: true });
-    endRangeDrag();
-    const drag = { pointerId: event.pointerId, changed: false };
-    rangeDrag.current = drag;
-    const move = (pointer: PointerEvent) => {
-      if (pointer.pointerId === drag.pointerId) {
-        moveRangeDrag(drag.pointerId, pointer.clientX);
-      }
-    };
-    const finish = (pointer: PointerEvent) => {
-      if (pointer.pointerId === drag.pointerId) {
-        endRangeDrag(drag.pointerId);
-      }
-    };
-    window.addEventListener("pointermove", move, true);
-    window.addEventListener("pointerup", finish, true);
-    window.addEventListener("pointercancel", finish, true);
-    rangeDragCleanup.current = () => {
-      window.removeEventListener("pointermove", move, true);
-      window.removeEventListener("pointerup", finish, true);
-      window.removeEventListener("pointercancel", finish, true);
-    };
-    try {
-      input.setPointerCapture(event.pointerId);
-    } catch {
-      /* The window listeners above are the fallback for platforms without capture. */
-    }
-    if (writeRangeValueAtPointer(input, event.clientX)) {
-      drag.changed = true;
-    }
-  };
-
-  useEffect(
-    () => () => {
-      rangeDragCleanup.current?.();
-      rangeDragCleanup.current = null;
-      rangeDrag.current = null;
-    },
-    [],
-  );
 
   const startHold = (
     event: ReactPointerEvent<HTMLButtonElement>,
@@ -683,24 +581,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       onPointerDown={(event) => {
         onPointerDown?.(event);
         selectAllOnClick.press({ x: event.clientX, y: event.clientY });
-        beginRangeDrag(event);
       }}
-      onPointerMove={(event) => {
-        onPointerMove?.(event);
-        moveRangeDrag(event.pointerId, event.clientX);
-      }}
-      onPointerUp={(event) => {
-        onPointerUp?.(event);
-        endRangeDrag(event.pointerId);
-      }}
-      onPointerCancel={(event) => {
-        onPointerCancel?.(event);
-        endRangeDrag(event.pointerId);
-      }}
-      onLostPointerCapture={(event) => {
-        onLostPointerCapture?.(event);
-        // Window listeners own the drag lifecycle when capture is lost.
-      }}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerCancel}
+      onLostPointerCapture={onLostPointerCapture}
       onClick={(event) => {
         onClick?.(event);
         const selectAll = selectAllOnClick.click({

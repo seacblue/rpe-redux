@@ -1,5 +1,5 @@
 /**
- * Music loading restores the transport before starting waveform analysis, and
+ * Music loading resets the transport before starting waveform analysis, and
  * never waits for that analysis: the decoded track is audible while the
  * waveform is still being created, and a later waveform cannot move the
  * playhead.
@@ -22,7 +22,6 @@ test("analysis starts when the playable buffer is installed", async () => {
     },
     pause: () => events.push("pause"),
     seek: () => events.push("seek"),
-    chartSeconds: () => 0,
     offsetSeconds: () => 0,
     getSession: () => session,
     setAnalysisSource: () => events.push("analysis-source"),
@@ -57,7 +56,7 @@ test("analysis starts when the playable buffer is installed", async () => {
   ]);
 });
 
-test("music load restores the transport before starting unawaited analysis", async () => {
+test("music load resets the transport before starting unawaited analysis", async () => {
   const events = [];
   let finishAnalysis = () => {};
   const deps = {
@@ -67,7 +66,6 @@ test("music load restores the transport before starting unawaited analysis", asy
     },
     pause: () => events.push("pause"),
     seek: (seconds) => events.push(["seek", seconds]),
-    chartSeconds: () => 12,
     offsetSeconds: () => 0.5,
     getSession: () => session,
     setAnalysisSource: () => events.push("analysis-source"),
@@ -97,7 +95,7 @@ test("music load restores the transport before starting unawaited analysis", asy
     "asset",
     ["duration", 100],
     "markers",
-    ["seek", 12.5],
+    ["seek", 0.5],
     "loaded",
     "analysis-source",
     "analysis-start",

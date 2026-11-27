@@ -71,14 +71,26 @@ function Host({ entry }: { entry: Entry }) {
   const primary = useRef<HTMLCanvasElement>(null);
   const notes = useRef<HTMLCanvasElement>(null);
   const shader = useRef<HTMLCanvasElement>(null);
+  const mask = useRef<HTMLCanvasElement>(null);
+  const noteFieldMask = useRef<HTMLCanvasElement>(null);
   const overlay = useRef<HTMLCanvasElement>(null);
   const output = useRef<HTMLCanvasElement>(null);
   useLayoutEffect(() => {
-    if (primary.current && notes.current && shader.current && overlay.current && output.current) {
+    if (
+      primary.current &&
+      notes.current &&
+      shader.current &&
+      mask.current &&
+      noteFieldMask.current &&
+      overlay.current &&
+      output.current
+    ) {
       entry.ready({
         primary: primary.current,
         notes: notes.current,
         shader: shader.current,
+        mask: mask.current,
+        noteFieldMask: noteFieldMask.current,
         overlay: overlay.current,
         output: output.current,
       });
@@ -104,6 +116,8 @@ function Host({ entry }: { entry: Entry }) {
       <canvas style={canvas} ref={primary} aria-hidden="true" />
       <canvas style={canvas} ref={notes} aria-hidden="true" />
       <canvas style={canvas} ref={shader} aria-hidden="true" />
+      <canvas style={canvas} ref={mask} aria-hidden="true" />
+      <canvas style={canvas} ref={noteFieldMask} aria-hidden="true" />
       <canvas style={canvas} ref={overlay} aria-hidden="true" />
       <canvas style={canvas} ref={output} aria-hidden="true" />
     </div>

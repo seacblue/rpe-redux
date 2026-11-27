@@ -136,4 +136,4 @@ interface ChartTransactionRequest {
 
 - 想改谱面：[谱面操作](place-note.md)
 - 想知道 `ui`、`storage`、`scripts` 放在哪：[扩展上下文](context.md)
-- 想读完整方法列表：[API 总览](api:)
+- 想读具体方法列表：从左侧 **API** 下面选择对应 handle，例如 [chart API](api:chart)。

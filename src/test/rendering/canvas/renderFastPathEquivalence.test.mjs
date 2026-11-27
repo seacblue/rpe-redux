@@ -231,6 +231,48 @@ test("note drawing keeps the palette colours for every note type", () => {
   assert.equal(draw(4), "drag");
 });
 
+test("timeline lifts authored alpha for selectable notes", () => {
+  const palette = {
+    noteTap: "tap",
+    noteHold: "hold",
+    noteFlick: "flick",
+    noteDrag: "drag",
+    noteFallback: "fallback",
+    selectionHighlightStroke: "selected",
+    remoteSelectionHighlight: "remote",
+  };
+  const receiver = {
+    appearance: { noteOpacity: 1, skin: undefined },
+    noteBatch: {
+      addHead(...args) {
+        receiver.renderedAlpha = args[8];
+        return true;
+      },
+    },
+    noteSolidBatch: { addHead() {} },
+    renderedAlpha: undefined,
+  };
+  const drawAlpha = (authoredAlpha) => {
+    const note = createNote(1, 0, 0);
+    note.alpha = authoredAlpha;
+    const context = { globalAlpha: 1, fillStyle: "" };
+    drawNote.call(receiver, context, {
+      palette,
+      note,
+      horizontal: 10,
+      vertical: 20,
+      endVertical: 20,
+      noteWidth: 40,
+      height: 100,
+    });
+    return receiver.renderedAlpha;
+  };
+
+  assert.equal(drawAlpha(255), 1);
+  assert.equal(drawAlpha(128), (80 + (128 / 255) * 175) / 255);
+  assert.equal(drawAlpha(0), 80 / 255);
+});
+
 test("timeline render layers repaint only when their key changes", () => {
   const previousDocument = globalThis.document;
   const contexts = [];

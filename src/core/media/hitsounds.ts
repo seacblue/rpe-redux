@@ -201,11 +201,11 @@ export class HitSounds {
     const names = new Set(["tap", "drag", "flick"]);
     if (this.chart) {
       const tempo = this.tempo ?? new TempoMap(this.chart.BPMList);
-      const now = this.transport.audioTime;
       for (const entry of hitTimeline(this.chart, tempo, this.offsets)) {
-        if (entry.time >= now - 0.1 && entry.time <= now + 2) {
-          names.add(entry.sound);
-        }
+        // Custom sounds may first occur much later than the current playhead.
+        // Decode every referenced name before playback instead of starting a
+        // fetch inside the 100 ms scheduling window and losing that trigger.
+        names.add(entry.sound);
       }
     }
     await Promise.all([...names].map((name) => this.loadSound(name)));
@@ -437,7 +437,14 @@ export class HitSounds {
   ): void {
     if (!this.transport.playing || this.transport.clockReady === false) {
       this.pausedAt = this.transport.audioTime;
-      this.stop();
+      // Let a long effect drain after the music reaches its natural end. A
+      // manual pause or seek before that point still stops every active voice.
+      const atAudioEnd =
+        Number.isFinite(this.transport.duration) &&
+        this.transport.audioTime >= this.transport.duration;
+      if (!atAudioEnd) {
+        this.stop();
+      }
       return;
     }
     const resumedAt = this.pausedAt;

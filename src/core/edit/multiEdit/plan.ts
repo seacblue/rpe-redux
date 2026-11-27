@@ -17,6 +17,7 @@ import {
 } from "../../global/chart/timing/beat.ts";
 import { countScoringNotes, HOOK_TAIL_FIELD, pinHookedEvent } from "../../global/chart/chart.ts";
 import type { JudgeLineEvent, JudgeLineNote } from "../../global/chart/chart.ts";
+import { noteFields } from "../../global/chart/noteFields.ts";
 import type { ExpressionScope } from "../../utils/batchScript.ts";
 import { alignShaderParameters } from "../../global/chart/shader/shaderEvents.ts";
 import { eventList, eventKey, chartWithEventLists } from "../events/eventTracks.ts";
@@ -115,7 +116,6 @@ const EXPRESSION_SCOPE_PROBE: BatchItem = {
   visibleTime: 1,
   alpha: 1,
   judgeArea: 1,
-  tint: [1, 1, 1],
   type: 1,
   isFake: 0,
   above: 1,
@@ -270,9 +270,7 @@ export function assemble(
   selectCopies = false,
 ): MultiEditResult {
   let chart = snapshot.chart;
-  const selection = new Set<number>(
-    kind === "notes" ? snapshot.notes.map((entry) => entry.index) : [],
-  );
+  const selection = new Set<number>();
   const eventSelection = new Set<string>(
     kind === "events" && !removeSource
       ? snapshot.events
@@ -281,6 +279,7 @@ export function assemble(
       : [],
   );
   const multiEventSelection = new Map<number, Set<string>>();
+  const multiLineSelection = new Map<number, Set<number>>();
   // A plan that keeps its sources leaves them selected on every source line;
   // copies add their own entries below. A removal starts from an empty map.
   if (kind === "events" && !removeSource) {
@@ -299,37 +298,82 @@ export function assemble(
       Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
     ),
   );
+  const sourceNoteLines = new Set<number>(
+    snapshot.notes.map((entry) =>
+      Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex,
+    ),
+  );
   const affected = new Set<number>(
     changes.flatMap((change) => [
       snapshot.lineIndex,
       change.lineIndex,
+      ...(kind === "notes" ? sourceNoteLines : []),
       ...(kind === "events" ? sourceEventLines : []),
     ]),
   );
   const notesByLine = new Map<number, JudgeLineNote[]>();
   const eventsByLine = new Map<number, Map<string, JudgeLineEvent[]>>();
-  const selectedNotes = new Set<number>(snapshot.notes.map((entry) => entry.index));
-  const noteUpdates = new Map<number, BatchChange>(
-    changes
-      .filter((change) => !change.copy)
-      .map((change): [number, BatchChange] => [change.index, change]),
-  );
+  const selectedNotesByLine = new Map<number, Set<number>>();
+  const noteChangesBySource = new Map<number, Map<number, BatchChange>>();
+  // Note ids are the identity contract; the object map only supports an
+  // unnormalized in-memory snapshot that has not received ids yet.
+  const noteSourcesById = new Map<string, { lineIndex: number; index: number }>();
+  const noteSourcesByObject = new Map<object, { lineIndex: number; index: number }>();
+  for (const entry of snapshot.notes) {
+    const lineIndex = Number.isInteger(entry.lineIndex) ? entry.lineIndex : snapshot.lineIndex;
+    let selected = selectedNotesByLine.get(lineIndex);
+    if (!selected) {
+      selected = new Set();
+      selectedNotesByLine.set(lineIndex, selected);
+    }
+    selected.add(entry.index);
+    const source = { lineIndex, index: entry.index };
+    if (typeof entry.note.id === "string" && entry.note.id.length > 0) {
+      noteSourcesById.set(entry.note.id, source);
+    }
+    noteSourcesByObject.set(entry.note, source);
+  }
+  if (kind === "notes") {
+    for (const change of changes) {
+      const source =
+        (typeof change.before.id === "string"
+          ? noteSourcesById.get(change.before.id)
+          : undefined) ?? noteSourcesByObject.get(change.before);
+      const sourceLine = source?.lineIndex ?? snapshot.lineIndex;
+      const sourceIndex = source?.index ?? change.index;
+      let lineChanges = noteChangesBySource.get(sourceLine);
+      if (!lineChanges) {
+        lineChanges = new Map();
+        noteChangesBySource.set(sourceLine, lineChanges);
+      }
+      lineChanges.set(sourceIndex, change);
+    }
+  }
   for (const lineIndex of affected) {
     const line = (chart.judgeLineList ?? [])[lineIndex];
     if (kind === "notes") {
       const notes: JudgeLineNote[] = [];
-      if (lineIndex === snapshot.lineIndex) {
-        selection.clear();
-      }
+      const selected = selectedNotesByLine.get(lineIndex) ?? new Set<number>();
+      const lineChanges = noteChangesBySource.get(lineIndex);
       (line?.notes ?? []).forEach((note, index) => {
-        const change = lineIndex === snapshot.lineIndex ? noteUpdates.get(index) : null;
-        if (change && change.lineIndex !== lineIndex) {
+        const change = lineChanges?.get(index);
+        if (selected.has(index)) {
+          if (change && change.lineIndex !== lineIndex && !change.copy) {
+            return;
+          }
+          if (lineIndex === snapshot.lineIndex) {
+            selection.add(notes.length);
+          }
+          let lineSelection = multiLineSelection.get(lineIndex);
+          if (!lineSelection) {
+            lineSelection = new Set();
+            multiLineSelection.set(lineIndex, lineSelection);
+          }
+          lineSelection.add(notes.length);
+          notes.push((change?.lineIndex === lineIndex ? change.after : note) as JudgeLineNote);
           return;
         }
-        if (lineIndex === snapshot.lineIndex && selectedNotes.has(index)) {
-          selection.add(notes.length);
-        }
-        notes.push((change?.after ?? note) as JudgeLineNote);
+        notes.push(note);
       });
       notesByLine.set(lineIndex, notes);
     } else {
@@ -357,12 +401,24 @@ export function assemble(
   }
   for (const change of changes) {
     if (kind === "notes") {
-      if (change.lineIndex !== snapshot.lineIndex || change.copy) {
+      const source =
+        (typeof change.before.id === "string"
+          ? noteSourcesById.get(change.before.id)
+          : undefined) ?? noteSourcesByObject.get(change.before);
+      const sourceLine = source?.lineIndex ?? snapshot.lineIndex;
+      if (change.lineIndex !== sourceLine || change.copy) {
         const notes = notesByLine.get(change.lineIndex) ?? [];
-        if (change.lineIndex === snapshot.lineIndex) {
-          selection.add(notes.length);
-        }
+        const position = notes.length;
         notes.push(change.after as JudgeLineNote);
+        if (change.lineIndex === snapshot.lineIndex) {
+          selection.add(position);
+        }
+        let lineSelection = multiLineSelection.get(change.lineIndex);
+        if (!lineSelection) {
+          lineSelection = new Set();
+          multiLineSelection.set(change.lineIndex, lineSelection);
+        }
+        lineSelection.add(position);
       }
     } else {
       const updates = eventsByLine.get(change.lineIndex);
@@ -441,6 +497,7 @@ export function assemble(
     focus: kind,
     selection,
     eventSelection,
+    multiLineSelection: kind === "notes" ? multiLineSelection : undefined,
     multiEventSelection,
     changes,
   };
@@ -456,8 +513,10 @@ export function previewMultiEdit(
   const operation = options.operation ?? "By";
   const random = randomSource(options.seed ?? 1);
   const modifier =
-    field === "hitSound"
-      ? null
+    field === "hitSound" || (kind === "notes" && noteFields.findByField(field) !== null)
+      ? noteFields.findByField(field)?.kind === "select" || field === "hitSound"
+        ? null
+        : distribution(options, random)
       : field === "t1" || field === "t2"
         ? beatDistribution(options, random)
         : distribution(options, random);
@@ -517,11 +576,40 @@ export function previewMultiEdit(
         lineIndex: sourceLine,
         copy: false,
       };
-      if (field === "hitSound") {
-        if (operation !== "To") {
-          throw new Error(t("editor.commands.multiEdit.error.hitSoundOperation"));
+      const noteField = kind === "notes" ? noteFields.findByField(field) : null;
+      const fieldOperation = noteField?.kind === "select" ? "To" : operation;
+      if (field === "hitSound" && operation !== "To") {
+        throw new Error(t("editor.commands.multiEdit.error.hitSoundOperation"));
+      }
+      if (field === "hitSound" || noteField?.kind === "select") {
+        if (noteField) {
+          const value = String(options.lower || "");
+          if (
+            noteField.kind === "select" &&
+            !noteField.options?.some(([option]) => option === value)
+          ) {
+            throw new Error(t("editor.commands.multiEdit.error.noteFieldValue"));
+          }
+          if (value === "" || value === String(noteField.clearValue ?? "")) {
+            delete after[noteField.field];
+          } else {
+            after[noteField.field] = noteField.kind === "number" ? Number(value) : value;
+          }
+        } else {
+          after.hitSound = String(options.lower || options.upper || "");
         }
-        after.hitSound = String(options.lower || options.upper || "");
+      } else if (noteField?.kind === "number") {
+        const before = Number(after[noteField.field] ?? noteField.defaultValue ?? 0);
+        if (!Number.isFinite(before)) {
+          throw new Error(t("editor.commands.multiEdit.error.unsupportedField"));
+        }
+        const endpointDistribution = kind === "notes";
+        const progress = endpointDistribution ? scope.u : (index + 1) / entries.length;
+        const value = modifier !== null ? modifier(index, progress) : null;
+        if (value === null) {
+          return;
+        }
+        after[noteField.field] = batchOperation(before, value, fieldOperation);
       } else {
         const endpointDistribution =
           kind === "notes" || ["line", "duration", "order"].includes(field);
@@ -531,27 +619,27 @@ export function previewMultiEdit(
           return;
         }
         if (field === "line") {
-          change.lineIndex = Math.round(batchOperation(sourceLine, value, operation));
+          change.lineIndex = Math.round(batchOperation(sourceLine, value, fieldOperation));
           change.copy = kind === "events";
         } else if (field === "both") {
           if (typeof after.start !== "number" || typeof after.end !== "number") {
             throw new Error(t("editor.commands.multiEdit.error.valueOnly"));
           }
-          after.start = batchOperation(after.start, value, operation);
-          after.end = batchOperation(after.end, value, operation);
+          after.start = batchOperation(after.start, value, fieldOperation);
+          after.end = batchOperation(after.end, value, fieldOperation);
         } else if (field === "duration" && kind === "events") {
-          const duration = Math.max(0, batchOperation(scope.duration, value, operation));
+          const duration = Math.max(0, batchOperation(scope.duration, value, fieldOperation));
           const durationBeat = toBeat(duration);
           after.startTime = time;
           after.endTime = addBeats(time, durationBeat);
           time = addBeats(time, durationBeat);
         } else if (field === "order") {
-          change.priority = batchOperation(scope.u, value, operation);
+          change.priority = batchOperation(scope.u, value, fieldOperation);
         } else {
           if (typeof scope[field] !== "number") {
             throw new Error(t("editor.commands.multiEdit.error.unsupportedField"));
           }
-          writeField(after, field, batchOperation(scope[field], value, operation));
+          writeField(after, field, batchOperation(scope[field], value, fieldOperation));
         }
       }
       groupChanges.push(change);

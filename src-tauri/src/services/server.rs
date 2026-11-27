@@ -143,7 +143,10 @@ where
             let value = args
                 .next()
                 .ok_or_else(|| format!("{argument} requires a port value"))?;
-            (argument.trim_start_matches("--"), Some(value))
+            (
+                argument.trim_start_matches("--").trim_end_matches("-port"),
+                Some(value),
+            )
         } else {
             continue;
         };

@@ -34,7 +34,12 @@ import {
   useEditorRuntimeValue,
 } from "../workspace/runtime/composition/EditorRuntime.tsx";
 import { useInspectorRuntime } from "../workspace/runtime/providers/InspectorProvider.tsx";
-import { closeInspector, inspectorPanels, openInspector } from "./controller.ts";
+import {
+  bindInspectorState,
+  closeInspector,
+  inspectorPanels,
+  openInspector,
+} from "./controller.ts";
 import {
   CLOSE_INSPECTOR_EVENT,
   OPEN_INSPECTOR_EVENT,
@@ -129,6 +134,12 @@ export function InspectorPanel({ hidden = false }: { hidden?: boolean }) {
   const surface = useInspectorSurface();
   const runtime = useEditorRuntime();
   const inspectorRuntime = useInspectorRuntime();
+  useEffect(() => {
+    if (!runtime) {
+      return undefined;
+    }
+    return bindInspectorState(runtime.ui.activeInspector);
+  }, [runtime]);
   useEffect(() => {
     const openRequested = (event: Event) => {
       const id = (event as CustomEvent<string>).detail;

@@ -22,7 +22,6 @@ import { getSelectionSession } from "../../../../../core/edit/selection/api.ts";
 import { useTranslation } from "../../../../../i18n/react.ts";
 import { IconButton } from "../../../../../design/components/button/IconButton.tsx";
 import { Divider } from "../../../../../design/components/divider/Divider.tsx";
-import { showToast } from "../../../../../design/patterns/ToastHost.tsx";
 import { EmptyState } from "../../../../../design/components/empty-state/EmptyState.tsx";
 import { useEditorRuntimeValue } from "../../workspace/runtime/composition/EditorRuntime.tsx";
 import { relativeTime } from "../relativeTime.ts";
@@ -150,12 +149,8 @@ export function HistoryPanel() {
       session.jumpToHistory(id);
       return;
     }
-    const result = selectiveUndo(session, id, t("workspace.history.collaborativeUndo"));
-    if (result.status === "conflict") {
-      showToast(t("workspace.history.undoConflict", { paths: result.paths.join(", ") }), "error");
-    } else if (result.status !== "committed") {
-      showToast(t("workspace.history.undoUnavailable"), "warning");
-    }
+    // Keep this document action quiet instead of surfacing transient feedback.
+    selectiveUndo(session, id, t("workspace.history.collaborativeUndo"));
   };
   return (
     <section className="redux-history-panel">

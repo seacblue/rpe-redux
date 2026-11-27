@@ -21,10 +21,25 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 | Clear clipboard                         | `Ctrl+Shift+Delete`            |
 | Select all                              | `Ctrl+A`                       |
 | Save chart                              | `Ctrl+S`                       |
+| Toggle horizontal grid                  | Unbound (set in Settings)      |
+| Toggle vertical grid                    | Unbound (set in Settings)      |
 
-`R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. For keyboard event placement, the key that finishes the two-key gesture controls hooking: Q synchronizes the event's two values, while R leaves them independent. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise. Clipboard start and end jumps have no default key; assign them in **Settings → Shortcuts** when needed. Chart selections are written as RPE-compatible JSON objects to the operating system's text clipboard: notes use `notes`, events use `events`, and a mixed selection includes both. Each object carries its RPE line and event-layer metadata. On paste, Redux applies the current target line and layer once rather than calculating source line/layer differences; a single event layer is the reliable cross-editor case, while multi-layer metadata remains available to RPE and other editors that interpret it. The editor silently reads an existing chart selection when it starts, then reports later external clipboard changes. When the clipboard ghost preview is enabled, the current note and event skins show the clipboard at the pointer's snapped paste target with translucent alpha.
+`R` places a Hold over the note area and an event over the event area. A second click finishes the placement; an endpoint before the start swaps the two anchors. For keyboard event placement, the key that finishes the two-key gesture controls hooking: Q synchronizes the event's two values, while R leaves them independent. `Esc` cancels a started but unfinished placement, and clears the selection when nothing is pending. `D` deletes the selected curve segment while the curve stage is open and selected objects otherwise. Clipboard start and end jumps have no default key; assign them in **Settings → Shortcuts** when needed. Chart selections are written as RPE-compatible JSON objects to the operating system's text clipboard: notes use `notes`, events use `events`, and a mixed selection includes both. Each object carries its RPE line and event-layer metadata. On paste, Redux applies the current target line and layer once rather than calculating source line/layer differences; a single event layer is the reliable cross-editor case, while multi-layer metadata remains available to RPE and other editors that interpret it. The editor silently reads an existing chart selection when it starts, then reports later external clipboard changes. When the clipboard ghost preview is enabled, the current note and event skins show the clipboard at the pointer's snapped paste target with translucent alpha. Multi-line editing previews every target track on its own panel and pastes only the tracks that field shows, so the ghost never promises a track the paste would drop.
 
-`Ctrl+click` a note to open the curve-note inspector with that note as the start, then `Ctrl+click` another note to set the end. The floating quick panel appears after both notes are picked; drag its title row to move it, change the type and easing, and generate the intermediate notes. A reversed click order is swapped to the earlier beat when generating, and a further `Ctrl+click` starts a new curve. The quick panel's Hold type writes one hold per point, each lasting one beat division (`1/X` at the current horizontal line count). Cancel the quick panel to drop both anchors and keep editing the pane by hand.
+The **Quick curve generation** shortcut is unbound by default and can be assigned in **Settings → Shortcuts**. Move the pointer over a note and press the configured key to open the curve-note inspector with that note as the start, then move over another note and press the key again to set the end. The floating quick panel appears after both notes are picked; drag its title row to move it, change the type and easing, and generate the intermediate notes. A reversed pick order is swapped to the earlier beat when generating, and a further shortcut press starts a new curve. The quick panel's Hold type writes one hold per point, each lasting one beat division (`1/X` at the current horizontal line count). Cancel the quick panel to drop both anchors and keep editing the pane by hand.
+
+## Pointer selection
+
+| Action                                              | Default                     |
+| --------------------------------------------------- | --------------------------- |
+| Select note, event, or judge line under the pointer | `Mouse Left`                |
+| Sweep-select timeline objects                       | `Mouse Left` drag           |
+| Sweep-deselect timeline objects                     | `Mouse Right` drag          |
+| Add or remove one object from the selection         | `Ctrl+Mouse Left`           |
+| Marquee-select objects                              | `Shift+Mouse Left` drag     |
+| Marquee-deselect objects                            | `Alt+Shift+Mouse Left` drag |
+
+These pointer meanings are registered in **Settings → Shortcuts**. A plain left press selects the object beneath the pointer or current cursor; Ctrl toggles one object; Shift starts a box selection; and the two sweep bindings apply the path under the pointer. Middle-click has no selection meaning.
 
 ## Event layers and relative paste
 
@@ -65,13 +80,13 @@ RPE Redux keeps the placement loop under the left hand. Q/W/E/R place notes and 
 
 `F` toggles the hook state of all selected events in one edit. The last event added to the selection decides the target state: if it is unhooked, all selected events become hooked; if it is hooked, all selected events become unhooked. For a box selection, left-to-right uses the rightmost hit and right-to-left uses the leftmost hit. While the sampler is open, `F` keeps its sampling-apply meaning.
 
-Hold `Z` and press the primary button to drag the **head** of the single selected event or Hold; use the secondary button for its **tail**. With exactly one object selected, the press may start anywhere in that field, including empty space: a click moves that edge to the pointer row, and a drag follows it live. Without that single selection, start on the object itself to select and trim it. A plain press near an event bar's top or bottom edge trims that edge; Ctrl+left on an edge trims the event head, and Ctrl+right on a Hold trims its tail. The moved edge follows the pointer row with the usual time snapping, the inspector's start and end fields and the timeline's head and tail value labels follow the preview, and a right-button drag release opens no menu or editor page. Plain `Z` line stepping/nudging runs when a short `Z` tap is released; starting a pointer gesture or holding `Z` long enough to auto-repeat cancels that pending movement, so preparing a drag never moves the selected Hold. If another shortcut is bound to `Z`, use the arrow-key alternatives or rebind it in **Settings → Shortcuts** before using the drag prekey.
+Hold `Z` and press the primary button to drag the **head** of the single selected event or Hold; use the secondary button for its **tail**. With exactly one object selected, the press may start anywhere in that field, including empty space: a click moves that edge to the pointer row, and a drag follows it live. Without that single selection, start on the object itself to select and trim it. A plain press near an event bar's top or bottom edge trims that edge; Ctrl+left remains the selection-toggle gesture, and Ctrl+right on a Hold trims its tail. The moved edge follows the pointer row with the usual time snapping, the inspector's start and end fields and the timeline's head and tail value labels follow the preview, and a right-button drag release opens no menu or editor page. Plain `Z` line stepping/nudging runs when a short `Z` tap is released; starting a pointer gesture or holding `Z` long enough to auto-repeat cancels that pending movement, so preparing a drag never moves the selected Hold. If another shortcut is bound to `Z`, use the arrow-key alternatives or rebind it in **Settings → Shortcuts** before using the drag prekey.
 
 Ctrl+wheel steps the active line. While multi-line editing is active the selected line set stays and only the active line moves, so the line field's `0-15 (3)` annotation follows the wheel. The step stays inside that set and follows ascending line numbers, not the order the expression was written in; from the first or last line of the set it wraps to the other end. The written order is untouched, so the expression never sorts itself. The field itself reads `0,15`, `0，15`, and `0 15` alike, and accepts `0-15`, `0:15`, and `0：15` ranges next to a trailing `(active)` annotation. An optional step writes `80:119/5` with an inclusive end, and a line folder's name adds every line it holds. Folder names drop commas and parentheses when created or renamed; names reserved by the expression grammar receive the first available numeric suffix, so a folder can always be written here. The written order is preserved: adding a line appends it, removing a line or block splices the affected range where it stands, and the field never merges or sorts the tokens.
 
-While multi-line editing shows more than one panel, dragging empty timeline space with the primary button pans the panels horizontally instead of starting a sweep. Both sweep gestures are unavailable in that layout, so neither the primary-button sweep-select nor the right-button sweep-deselect starts a sweep, and a `Shift`+drag marquee takes over additive and subtractive selection; a primary click that does not drag clears the selection. Single-panel layouts keep both sweeps.
+While multi-line editing shows more than one panel, dragging empty timeline space with the primary button pans the panels horizontally instead of starting a sweep. Both sweep gestures are unavailable in that layout, so neither the primary-button sweep-select nor the right-button sweep-deselect starts a sweep, and a `Shift`+drag marquee takes over additive and subtractive selection; a primary click that does not drag clears the selection. A marquee selects over the whole beat range it is dragged across, including events past the visible window. Single-panel layouts keep both sweeps.
 
-Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning.
+Hold `Ctrl`, type a judge-line number, and release `Ctrl` to jump to that line and switch the timeline to a single-line selection. Line numbers are 0-based. An existing `Ctrl+number` command takes precedence over the gesture; an unavailable line number leaves the current line unchanged and shows a warning. Shortcut recordings preserve the physical digit block as `DIGIT0`…`DIGIT9` or `NUMPAD0`…`NUMPAD9`; the legacy written form `1` remains an alias for `DIGIT1`.
 
 The stage drag handles remain; the same transforms are also available from the keyboard:
 
@@ -86,27 +101,30 @@ The left-hand chords are the defaults; the arrow and bracket chords remain famil
 
 ## View and transport
 
-| Action                         | Default                               |
-| ------------------------------ | ------------------------------------- |
-| Preview only / previous layout | `Ctrl+Space`                          |
-| Note region                    | `Ctrl+Shift+Q`                        |
-| Event region                   | `Ctrl+Shift+W`                        |
-| Preview region                 | `Ctrl+Shift+E`                        |
-| Notes and events together      | `Ctrl+Shift+R`                        |
-| Reset the view                 | `Ctrl+Shift+F`                        |
-| In-game UI                     | `Ctrl+Shift+G`                        |
-| Play / pause                   | `Space`                               |
-| Hold preview playback, return  | `T`                                   |
-| Hold preview playback, stay    | `U`                                   |
-| Timeline backward / forward    | `Wheel Down` / `Wheel Up`             |
-| Fast seek backward / forward   | `Shift+Wheel Down` / `Shift+Wheel Up` |
-| Next / previous judge line     | `Ctrl+Wheel Down` / `Ctrl+Wheel Up`   |
-| Zoom timeline out / in         | `Alt+Wheel Down` / `Alt+Wheel Up`     |
-| Settings                       | `Ctrl+K`                              |
+| Action                         | Default                                         |
+| ------------------------------ | ----------------------------------------------- |
+| Preview only / previous layout | `Ctrl+Space`                                    |
+| Note region                    | `Ctrl+Shift+Q`                                  |
+| Event region                   | `Ctrl+Shift+W`                                  |
+| Preview region                 | `Ctrl+Shift+E`                                  |
+| Notes and events together      | `Ctrl+Shift+R`                                  |
+| Reset the view                 | `Ctrl+Shift+F`                                  |
+| In-game UI                     | `Ctrl+Shift+G`                                  |
+| Play / pause                   | `Space`                                         |
+| Hold preview playback, return  | `T`                                             |
+| Hold preview playback, stay    | `U`                                             |
+| Timeline backward / forward    | `Wheel Down` / `Wheel Up`                       |
+| Fast seek backward / forward   | `Alt+Wheel Down` / `Alt+Wheel Up`               |
+| Next / previous judge line     | `Ctrl+Wheel Down` / `Ctrl+Wheel Up`             |
+| Multi-line scroll              | `Ctrl+Shift+Wheel Up` / `Ctrl+Shift+Wheel Down` |
+| Zoom timeline out / in         | `Alt+Shift+Wheel Down` / `Alt+Shift+Wheel Up`   |
+| Settings                       | `Ctrl+K`                                        |
 
 `Ctrl+Space` uses a runtime-only preview overlay: from a normal layout it shows only the preview without rewriting the note, event, or preview switches, and the next press restores those switches. If the raw layout is already preview-only or empty, it restores the latest complete recorded snapshot instead. Note, event, and preview changes made within 500ms are committed as one snapshot, so intermediate combinations are not used as the return target. The preview and empty layouts are valid snapshots. Choosing the note or event region directly leaves the preview overlay and keeps the selected layout.
 
-Audio volume is controlled from the expandable console at the bottom-right of the sidebar. `Alt+Wheel` remains reserved for timeline zoom when the pointer is over the timeline.
+Audio volume is controlled from the expandable console at the bottom-right of the sidebar. `Alt+Shift+Wheel` remains reserved for timeline zoom when the pointer is over the timeline. Plain `Shift+Wheel` has no default timeline action, so it remains available for range selection gestures.
+
+In multi-line editing, `Ctrl+Shift+Wheel Up` and `Ctrl+Shift+Wheel Down` scroll the active note or event panels left and right. The offset is clamped to the available panel range, and both directions can be rebound in **Settings → Shortcuts**.
 
 `T` and `U` are held audition gestures. While held they switch to the preview-only layout and play; releasing restores the layout. `T` also returns to the time where the hold began, while `U` stops at the release position. The toolbar's preview-audition button uses the `T` behavior. When the chart is already playing, the hold only hides the authoring surfaces: releasing restores them and the playback keeps running, so a running chart is never paused or rewound by these keys.
 

@@ -50,6 +50,8 @@ export interface TimelineRuntimeSurface extends TimelineMethodSurface {
   eventOverlayBatch: TimelineOverlayBatch;
   getSession: () => EditorSession;
   getPreviewSession(): EditorSession | null;
+  getPreviewChart(): EditorSession["chart"] | null;
+  setPreviewChart(previewChart: EditorSession["chart"] | null): void;
   /** Events an active editor preview removes; the event layer skips them visually. */
   hiddenEvents?: ReadonlySet<JudgeLineEvent>;
   /** Notes an active editor preview replaces; the note layer skips them visually. */
@@ -142,6 +144,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "eventRects"
     | "eventRectsForLine"
     | "eventCursor"
+    | "cursorLineIndex"
     | "layer"
     | "notify"
     | "hoverArea"
@@ -171,6 +174,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "panelCount"
     | "timeAt"
     | "tempo"
+    | "snapY"
     | "origin"
     | "viewHeight"
     | "judgementOffset"
@@ -182,6 +186,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "verticalForLine"
     | "eventVertical"
     | "division"
+    | "visiblePanelRange"
   >;
 };
 
@@ -200,6 +205,7 @@ export type TimelineNoteInteractionReceiver = Pick<
   | "notesCanvas"
   | "rectangleTimes"
   | "refreshIndex"
+  | "setPreviewChart"
   | "updateSweep"
   | "viewport"
   | "visible"

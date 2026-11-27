@@ -5,7 +5,7 @@
  *
  * The contract is deliberately small: one output mode (`--debug` or
  * `--portable`), one optional compiler profile (`--fast`), and one optional
- * download skip (`--without-bundled-tools`). Anything else is rejected rather
+ * optional-tool skip (`--without-bundled-tools`). Anything else is rejected rather
  * than silently ignored.
  */
 import { SKIP_BUNDLED_TOOLS_FLAG } from "./bundledTools.mjs";
@@ -28,7 +28,7 @@ staged portable folder.
   --debug                     Debug executable without an installer, for smoke tests.
   --portable                  Staged portable folder without an installer.
   --fast                      Thin LTO and parallel codegen; release-shaped, not for publishing.
-  --without-bundled-tools     Skip the FFmpeg and Cloudflare Tunnel downloads; those
+  --without-bundled-tools     Leave FFmpeg and Cloudflare Tunnel out; those
                               features report a warning at runtime.
   --help, -h                  Show this help.
 
@@ -40,7 +40,7 @@ staged portable folder.
  *
  * @returns `{ help: true }` when help was requested, otherwise the selected
  * output mode, whether the fast release profile is active, and whether the
- * pinned tool downloads are skipped.
+ * optional tool staging is skipped.
  * @throws when a flag is unknown or two output flags are combined.
  */
 export function parseBuildFlags(argv) {

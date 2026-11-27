@@ -129,8 +129,10 @@ export function matchingInfo(
 /**
  * Choose the audio and image names an opened chart should use.
  *
- * Prefers authored metadata, then a matching Info.txt reference, then a unique
- * asset with the expected extension in the chart's directory.
+ * Prefers authored metadata and a matching Info.txt reference. Backgrounds may
+ * still use a unique image in the chart directory for the editor backdrop;
+ * audio is never inferred from an unreferenced asset because the chart must
+ * explicitly own its music track.
  */
 export function resourceReferences(
   chart: Chart,
@@ -168,12 +170,16 @@ export function resourceReferences(
     );
     return sameStem.length === 1 ? sameStem[0] : candidates.length === 1 ? candidates[0] : "";
   };
-  /** Prefer a name that exists, then an inferred file, then the first authored name. */
-  const resolve = (names: (string | undefined)[], extensions: RegExp): string => {
+  /** Prefer a present reference, optionally falling back to one inferred asset. */
+  const resolve = (
+    names: (string | undefined)[],
+    extensions: RegExp,
+    inferUnreferenced = true,
+  ): string => {
     const present = names.filter((name): name is string => Boolean(name));
     return (
       present.find((name) => Boolean(assetPath(assets, name, chartName))) ||
-      infer(extensions) ||
+      (inferUnreferenced ? infer(extensions) : "") ||
       present[0] ||
       ""
     );
@@ -182,6 +188,7 @@ export function resourceReferences(
     song: resolve(
       [chart.META.song, infoReference("Song")],
       /\.(mp3|ogg|wav|flac|m4a|aac|opus|webm)$/i,
+      false,
     ),
     background: resolve(
       [chart.META.background, infoReference("Picture")],

@@ -13,6 +13,7 @@ import { idleScheduler } from "../../document/save/idleScheduler.ts";
 import type { AssetMap } from "../../../../../../core/global/document/types.ts";
 import type { TauriDocumentStore } from "../../../../../../core/platform/desktop/documentStore.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
+import { withChartEditSeconds } from "../../../../../../core/global/chart/editTime.ts";
 import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.ts";
 import type { PreviewRuntime } from "./PreviewProvider.tsx";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
@@ -294,8 +295,7 @@ export function createPlaybackRuntime(options: {
     async () => {
       const current = options.session.current;
       const document = current.chart;
-      const snapshot = { ...document };
-      delete snapshot.chartTime;
+      const snapshot = withChartEditSeconds(document, current.editSeconds);
       const progress = showProgressToast(t("editor.app.notice.backupSaving"), "info");
       progress.setProgress(0.05);
       const onProgress = (value: number) => progress.setProgress(0.05 + value * 0.9);

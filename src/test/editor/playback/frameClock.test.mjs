@@ -14,7 +14,7 @@ function createAudio(initial) {
 }
 
 test("visual playback clock fills coarse audio samples", () => {
-  const audio = createAudio();
+  const audio = { ...createAudio(), update() {} };
   const clock = createVisualPlaybackClock({
     audio,
     chartSeconds: () => audio.time - 0.1,
@@ -115,7 +115,7 @@ test("the frame clock keeps the drawn picture when playback stops", () => {
       audio,
       timeline: { autoScroll() {} },
       lineSwitcher: { draw() {} },
-      editClock: { advance() {} },
+      editClock: { advance() {}, seconds: 0 },
       hitSounds: { tick() {} },
       session: () => ({}),
       tempo: () => ({ points: [{ beat: 0, secondsPerBeat: 0.5 }] }),
@@ -123,7 +123,12 @@ test("the frame clock keeps the drawn picture when playback stops", () => {
       drawnSeconds: (seconds) => picture.seconds(seconds),
       invalidate() {},
     },
-    { atHome: () => false, hasDocument: () => true, documentHidden: () => false },
+    {
+      atHome: () => false,
+      hasDocument: () => true,
+      documentHidden: () => false,
+      windowFocused: () => true,
+    },
   );
 
   assert.equal(clock.seconds(0), 0);
@@ -139,4 +144,51 @@ test("the frame clock keeps the drawn picture when playback stops", () => {
 
   picture.release();
   assert.equal(clock.seconds(1032), 3.01);
+});
+
+test("the frame clock marks only a focused document as active editing", () => {
+  const audio = { ...createAudio(), update() {} };
+  let focused = true;
+  const active = [];
+  const session = {};
+  const clock = createFrameClock(
+    {
+      audio,
+      timeline: { autoScroll() {} },
+      lineSwitcher: { draw() {} },
+      editClock: {
+        seconds: 0,
+        advance(_timestamp, value) {
+          active.push(value);
+        },
+      },
+      hitSounds: { tick() {} },
+      session: () => session,
+      tempo: () => ({ points: [{ beat: 0, secondsPerBeat: 0.5 }] }),
+      chartSeconds: () => 0,
+      drawnSeconds: (seconds) => seconds,
+      invalidate() {},
+    },
+    {
+      atHome: () => false,
+      hasDocument: () => true,
+      documentHidden: () => false,
+      windowFocused: () => focused,
+    },
+  );
+  const state = {
+    lastTick: 0,
+    frameSampleStart: 0,
+    frameSampleCount: 0,
+    frameSampleCallbacks: 0,
+    measuredFps: 0,
+    measuredPaintFps: 0,
+    animationCallbacks: 0,
+  };
+
+  clock.advance(100, state, false);
+  focused = false;
+  clock.advance(200, state, false);
+
+  assert.deepEqual(active, [true, false]);
 });

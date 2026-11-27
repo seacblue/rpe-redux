@@ -1,5 +1,5 @@
 /**
- * Shift-drag preview rules for the toolbar judge-line picker.
+ * Marquee preview rules for the toolbar judge-line picker.
  *
  * A drag only computes a candidate selection; the committed selection stays
  * untouched until release. The picker owns pointer tracking, auto-scroll, and
@@ -9,8 +9,13 @@
  * border box.
  */
 
-/** Direction painted by a Shift drag. */
-export type MarqueeMode = "add" | "remove";
+import {
+  listSelectionAfterMarquee,
+  type ListSelectionModifiers,
+} from "../../../../design/patterns/list/listSelection.ts";
+
+/** Operation painted by a list drag. */
+export type MarqueeMode = "replace" | "add" | "remove" | "toggle";
 
 /** One point in the scrolling list's content coordinates. */
 export interface MarqueePoint {
@@ -32,10 +37,24 @@ export interface MarqueePreview {
   selection: ReadonlySet<number>;
   /** Candidate current line; a member of `selection`. */
   focus: number;
-  /** Whether the drag paints rows in or out. */
+  /** Whether the drag replaces, adds, removes, or toggles rows. */
   mode: MarqueeMode;
   /** Rows the drag touches, in commit order; the pressed row leads. */
   lines: readonly number[];
+}
+
+/** Resolve the focus line from the topmost row touched by the current marquee. */
+export function resolveMarqueeFocusLine(
+  pressedIndex: number,
+  touched: readonly number[],
+  fallback: number,
+): number {
+  const valid = touched.filter((index) => Number.isInteger(index) && index >= 0);
+  return valid.length
+    ? Math.min(...valid)
+    : Number.isInteger(pressedIndex) && pressedIndex >= 0
+      ? pressedIndex
+      : fallback;
 }
 
 /** Receives the final preview exactly once, on release. */
@@ -43,7 +62,7 @@ export type MarqueeCommit = (preview: MarqueePreview) => void;
 
 /** A drag that never writes to the committed selection before `finish`. */
 export interface MarqueeDrag {
-  /** `add` paints rows in, `remove` paints rows out. */
+  /** The operation selected by the pointer modifiers. */
   readonly mode: MarqueeMode;
   /** The row pressed to start the drag. */
   readonly anchor: number;
@@ -64,7 +83,7 @@ export interface MarqueeDrag {
 }
 
 /**
- * Start a Shift drag from `committed`.
+ * Start a list drag from `committed`.
  *
  * The pressed row toggles in the preview immediately. If it is already selected
  * and at least one other line is selected, the drag paints removal; otherwise it
@@ -75,18 +94,34 @@ export function createMarqueeDrag(
   committed: ReadonlySet<number>,
   anchor: number,
   commit: MarqueeCommit,
+  modifiers?: ListSelectionModifiers,
 ): MarqueeDrag {
   const base = new Set(committed);
-  const mode: MarqueeMode = base.has(anchor) && base.size > 1 ? "remove" : "add";
+  // Keep the old no-options contract for callers outside the list surfaces;
+  // current list callers always pass the pointer modifiers explicitly.
+  const legacy = modifiers === undefined;
+  const mode: MarqueeMode = legacy
+    ? base.has(anchor) && base.size > 1
+      ? "remove"
+      : "add"
+    : modifiers.ctrlKey || modifiers.metaKey
+      ? "toggle"
+      : modifiers.shiftKey
+        ? "add"
+        : "replace";
   let closed = false;
-  let current = previewSelection(base, anchor, mode, [anchor], true);
+  let current = legacy
+    ? previewSelection(base, anchor, mode, [anchor], true)
+    : previewListSelection(base, anchor, mode, [anchor], true);
   return {
     mode,
     anchor,
     preview: () => current,
     update(rows, forward) {
       if (!closed) {
-        current = previewSelection(base, anchor, mode, rows, forward);
+        current = legacy
+          ? previewSelection(base, anchor, mode, rows, forward)
+          : previewListSelection(base, anchor, mode, rows, forward);
       }
       return current;
     },
@@ -175,9 +210,35 @@ function previewSelection(
   return { selection: next, focus, mode, lines: affected };
 }
 
+/** Resolve a modern Windows-style drag from the captured selection. */
+function previewListSelection(
+  committed: ReadonlySet<number>,
+  anchor: number,
+  mode: MarqueeMode,
+  rows: readonly number[],
+  forward: boolean,
+): MarqueePreview {
+  const touched = uniqueRows(rows);
+  const affected = uniqueRows([anchor, ...touched]);
+  const order = uniqueRows([...committed, ...affected]);
+  const modifiers: ListSelectionModifiers = {
+    ctrlKey: mode === "toggle",
+    shiftKey: mode === "add",
+  };
+  const result = listSelectionAfterMarquee(order, committed, affected, modifiers, true);
+  const candidates = forward ? [...touched].reverse() : touched;
+  const focus = candidates.find((index) => result.selection.includes(index)) ?? result.focus;
+  return {
+    selection: new Set(result.selection),
+    focus: focus ?? anchor,
+    mode,
+    lines: affected,
+  };
+}
+
 /** Non-integer and duplicate row indices never enter a selection. */
 function uniqueRows(rows: readonly number[]): number[] {
-  return [...new Set(rows.filter((index) => Number.isInteger(index)))];
+  return [...new Set(rows.filter((index) => Number.isInteger(index) && index >= 0))];
 }
 
 /** Lowest selected index, used when no touched row remains selected. */

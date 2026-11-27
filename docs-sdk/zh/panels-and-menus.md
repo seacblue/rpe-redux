@@ -246,4 +246,4 @@ context.addCleanup(() => {
 
 - [声明式 UI](ui-reference.md)：节点、属性、事件和预算。
 - [设计系统](design-system.md)：按钮、列表、卡片、通知和图标。
-- 左侧 **API** 树：`ui.panel`、`ui.sidebar`、`ui.toolbar`、`ui.contextMenu` 的方法页；异步约定见[API 约定](api-reference.md)。
+- 左侧 **API** 树：`ui.panel`、`ui.sidebar`、`ui.toolbar`、`ui.contextMenu` 的方法页；每个方法页都包含自己的权限、返回值和错误处理。

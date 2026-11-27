@@ -74,6 +74,19 @@ test("note and event marquee colours share the default", () => {
   assert.equal(settingsRegistry.definition("timeline-event-marquee-color")?.default, "#00C800");
 });
 
+test("note defaults match RPE and normalize the timeline size around 175", () => {
+  assert.equal(settingsRegistry.definition("note-size")?.default, 1);
+  assert.equal(settingsRegistry.definition("timeline-note-size")?.default, 175);
+
+  const previous = values.byId.get("timeline-note-size");
+  try {
+    values.byId.set("timeline-note-size", "350");
+    assert.equal(readEditorDisplaySettings().timeline.noteScale, 2);
+  } finally {
+    values.byId.set("timeline-note-size", previous);
+  }
+});
+
 test("clipboard ghosts follow the overview bar toggle", () => {
   assert.equal(settingsRegistry.definition("timeline-clipboard-range-bars-enabled")?.default, true);
   assert.equal(

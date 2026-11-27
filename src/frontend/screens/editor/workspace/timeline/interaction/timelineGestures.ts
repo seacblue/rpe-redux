@@ -10,6 +10,7 @@
 import type { EditorSession } from "../../../../../../core/edit/session/session.ts";
 import type { SelectionState } from "../../../../../../core/edit/session/selectionHistory.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
+import type { OverlapPress } from "../../../../../../core/edit/timeline/overlapPress.ts";
 import { EXTENDED_EVENT_LAYER } from "../drawing/tracks.ts";
 import type {
   TimelinePoint,
@@ -59,6 +60,8 @@ export class TimelineGestures {
   cursor: TimelinePoint | null = null;
   eventCursor: TimelinePoint | null = null;
   drag: TimelineDrag | null = null;
+  /** The pending plain press that may open an overlap menu on release. */
+  overlapPress: OverlapPress | null = null;
   pendingHold: PendingHold | null = null;
   /**
    * The document a bulk drag is proposing, or null when no drag is previewing.
@@ -67,6 +70,8 @@ export class TimelineGestures {
    * means "a drag is previewing".
    */
   preview: EditorSession | null = null;
+  /** A chart-only proposal used by a direct single-note drag preview. */
+  previewChart: EditorSession["chart"] | null = null;
   clipboardPointer: TimelinePoint | null = null;
   hoverArea?: TimelineArea;
   cursorLineIndex?: number;
@@ -294,7 +299,9 @@ export class TimelineGestures {
     this.pendingHold = null;
     this.eventInteraction.pending = null;
     this.drag = null;
+    this.overlapPress = null;
     this.eventInteraction.drag = null;
+    this.previewChart = null;
     if (setTimelineDragPreview(null)) {
       trackedSession?.notify("selection");
     }
@@ -337,6 +344,7 @@ export class TimelineGestures {
     this.eventRectIndexSource = null;
     this.eventRectIndex.clear();
     this.preview = null;
+    this.previewChart = null;
     this.previewMarquee = null;
     this.previewCancel?.();
     this.previewCancel = undefined;

@@ -355,6 +355,15 @@ const dispose = context.ui.registerDesignPanel({
 
 `api.chart.range()` 返回谱面已写入内容的边界：`startBeat`、`endBeat`、`startSeconds` 和 `endSeconds`。它统计音符、普通事件轨和 Shader 事件，不等于引用音频文件的时长；需要在末尾放置对象时，应在 `endBeat` 上明确增加拍数余量。
 
+`api.chart.beats` 提供约分拍三元组的精确加减法，不会先转换成浮点数。`add` 和 `subtract` 组合两个拍三元组，`addFraction` 向一个拍三元组增加分子/分母表示的分数。每个方法返回 `ApiResult`，并随 `chart.read` capability 提供。
+
+```js
+const end = await api.chart.beats.addFraction([2, 0, 1], 1, 2);
+if (end.ok) {
+  console.log(end.value); // [2, 1, 2]
+}
+```
+
 `api.chart.lineGroups()` 只返回扁平的判定线 folder：`{ index, name, lineIndices }`，不会物化完整谱面快照。脚本应该优先用返回的 folder 名传给 `lineGroups.assign`，这样 folder 索引变化后仍然容易读懂、也更不容易切错。
 
 ```js
@@ -383,11 +392,85 @@ if (lines.ok && lines.value.length > 0) {
 
 公开的[谱面操作](../docs-sdk/zh/place-note.md)指南包含完整插件、选中音符更新、事件和结果处理。
 
+### 持久化投影与 Workspace Shader
+
+需要把自定义约定写入谱面副本的扩展可以申请 `chart.persistence`。规则可以匹配 `chart`、`meta`、`judgeLine`、`note`、`event` 或任意 JSON 物件，然后在保存、恢复和导出的脱离副本上添加或删除字段；它不会修改编辑器中的实时谱面，并且每条规则都可以独立 `enable` / `disable`。
+
+```js
+await api.persistence.register({
+  id: "accent-taps",
+  label: "Accent tap notes",
+  kind: "note",
+  match: { type: 1 },
+  set: { reduxAccent: "gold" },
+  warning: {
+    code: "accent-taps.external-player",
+    message: "Accent metadata is Redux-specific.",
+  },
+});
+await api.persistence.disable("accent-taps");
+```
+
+导出前可以调用 `persistence.inspect(chart, "export")` 获取结构化 warning；真正生成文件时规则会再次应用，inspect 本身没有副作用。扩展需要全屏渲染阶段时可以申请 `workspace.shader` 并注册 GLSL pass。`position` 支持 `before-chart` / `after-chart`，同一阶段按 `order` 稳定排序；`exportPolicy: "embed"` 会把 source 和 uniform 默认值写入 `META.ReduxWorkspaceShaderPasses`，`warn` 保持运行时效果并提示外部播放器可能忽略，`ignore` 则完全不写出。
+
+如果希望注入的音符属性表现得像编辑器原生字段，可以申请 `chart.note-fields` 并注册控件 schema。宿主会通过普通事务路径写入字段，并自动把它加入音符检查器和批量编辑器；字段的具体语义仍由扩展自己负责。
+
+```js
+await api.noteFields.register({
+  id: "hand",
+  field: "hand",
+  label: "手序",
+  kind: "select",
+  options: [
+    ["", "未标记"],
+    ["left", "左手"],
+    ["right", "右手"],
+  ],
+  clearValue: "",
+});
+```
+
+如果 pass 需要作用于谱面物件，可以使用 PhiZone 风格的共享层级，而不是根据最终颜色猜测物件。给 `mask.layers` 填入 `chart.note.hold`、`chart.note.drag`、`chart.note.tap`、`chart.note.flick` 等语义 id，渲染器会生成一张 RGBA 音符层 atlas，并向 GLSL 暴露 `rpeLayerMask(uv)`。扩展还可以用 `api.noteFields.register` 注册原生音符字段，再用 `mask: { kind: "note-field", field: "yourField", value: "yourValue", channel: 0 }` 选择字段值；渲染器会通过 `rpeNoteFieldMask(uv)` 暴露字段 atlas。字段名不写死在编辑器里，因此手序、轨道组或其他扩展属性都可以复用同一条接口。当前适配器覆盖四种音符层和扩展字段对应的音符形状；`chart.judge-line`、`chart.hit-effect` 和 `hud.*` 已作为稳定层级保留，等对应 renderer adapter 接入后即可使用，因此增加物件类型不需要继续增加公开 mask 方法。
+
+“高级编辑”里提供两种导出模式。分层模式是 Redux/PhiZone 的无损契约，会保留语义 mask 和有序 pass；独立模式为每个嵌入 pass 选择 `portable.source`，去掉内置层级依赖。没有 fallback 的 pass 会在导出时被省略并产生 warning，不保证完全等价的 fallback 也会产生 warning。这是便携性的真实边界：只拿到最终屏幕纹理的播放器无法重新推断任意物件身份，因此只有插件主动声明的 fallback 才能保留预期效果。
+
+```js
+await api.shader.register({
+  id: "note-outline",
+  label: "Note outline",
+  source: `uniform sampler2D screenTexture;
+uniform vec4 outlineColor;
+void main() {
+  vec4 base = texture2D(screenTexture, uv);
+  float note = rpeLayerMask(uv);
+  gl_FragColor = mix(base, outlineColor, note * outlineColor.a);
+}`,
+  values: { outlineColor: [50, 135, 255, 0.35] },
+  mask: { layers: ["chart.note.tap", "chart.note.flick"] },
+  portable: { source: "...不依赖 rpeLayerMask 或 rpeNoteFieldMask 的等价或降级实现..." },
+  position: "after-chart",
+  exportPolicy: "embed",
+});
+```
+
+```js
+await api.shader.register({
+  id: "soft-vignette",
+  label: "Soft vignette",
+  source:
+    "precision mediump float; uniform sampler2D u_texture; varying vec2 v_texCoord; void main(){ vec2 p=v_texCoord-.5; float v=1.-dot(p,p)*.8; gl_FragColor=texture2D(u_texture,v_texCoord)*v; }",
+  position: "after-chart",
+  exportPolicy: "embed",
+});
+```
+
+两种注册表都按扩展 owner 隔离；扩展禁用或卸载时会清理自己的规则和 pass。Shader pass 会进入实时预览和离屏预览，导出时的 warning 则明确说明跨播放器的兼容边界。
+
 ## 信任
 
 `author`、`license` 和来源 URL 只是元数据。信任由宿主根据包的字节和绑定到当前指纹的用户确认计算。包内容变化后会变成 pending 或 blocked，直到再次确认。
 
-内置来源的规则更窄：只有 `id`、版本、manifest、翻译和入口字节都与随构建打包的包规范化摘要一致时，才会被标记为内置。可写的 resource / portable 目录不能占用 `builtin.*` 标识，portable 包也不能覆盖随应用安装的包。内置入口先注册延迟加载器，只有在启用后才会执行；两个纯脚本内置包仅首次启动时自动启用，用户显式关闭后不会因更新重新打开。
+内置来源的规则更窄：只有 `id`、版本、manifest、翻译和入口字节都与随构建打包的包规范化摘要一致时，才会被标记为内置。可写的 resource / portable 目录不能占用 `builtin.*` 标识，portable 包也不能覆盖随应用安装的包。内置入口先注册延迟加载器，只有在启用后才会执行；`builtin.official` 仅在首次启动时自动启用，用户显式关闭后不会因更新重新打开。
 
 沙箱不提供可改写宿主输入的同步 `hooks`。需要修改谱面的扩展必须通过显式事务或公开 API 完成；只读事件通过 `context.events` 订阅。脚本默认快捷键使用 `extension.<owner>.script.<local>`（旧的 `mod.<owner>.script.*` 绑定会在首次加载时迁移）；显式的快捷键、工具栏和 values 注册使用 `extension.<owner>.<local>`；扩展只能写入自己声明过的值。
 

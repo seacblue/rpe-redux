@@ -1,6 +1,8 @@
 /** Colour swatch value rules: normalization and contrast ink selection. */
 import assert from "node:assert/strict";
 import test from "node:test";
+import "../../../core/settings/features/appearance.ts";
+import { values } from "../../../core/state/values.ts";
 import {
   colorInk,
   displayHexColor,
@@ -9,6 +11,10 @@ import {
   readColorDraft,
 } from "../../../design/components/input/colorModel.ts";
 import { sourceOverColor } from "../../../core/utils/colors.ts";
+import {
+  selectionColor,
+  selectionHighlightColor,
+} from "../../../frontend/screens/editor/canvas/palette.ts";
 
 test("normalizes long, short, and invalid colour values", () => {
   assert.equal(normalizeColor("#a1b2c3"), "#A1B2C3");
@@ -41,4 +47,19 @@ test("a committed hex draft only carries the alpha it states", () => {
 
 test("source-over colour mixing keeps the base line in the highlight result", () => {
   assert.equal(sourceOverColor("#000000", "#FFFFFF80", 0.9), "rgba(135,135,135,0.950196)");
+});
+
+test("selection colours preserve alpha for the canvas renderers", () => {
+  values.byId.set("selected-note-color", "#D5FFD533");
+  try {
+    assert.equal(selectionColor("selected-note-color", "#00C800"), "#D5FFD533");
+    assert.deepEqual(selectionHighlightColor({ selectionHighlightStroke: "#D5FFD533" }), [
+      0xd5,
+      0xff,
+      0xd5,
+      0x33 / 0xff,
+    ]);
+  } finally {
+    values.byId.reset("selected-note-color");
+  }
 });

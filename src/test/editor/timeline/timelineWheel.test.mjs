@@ -44,17 +44,87 @@ test("default wheel bindings step lines with Ctrl and seek time otherwise", () =
   }
 });
 
-test("default Alt wheel bindings zoom the timeline", () => {
+test("default Alt wheel bindings fast-seek the timeline", () => {
   const dispose = registerEditorShortcuts();
   try {
     assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+      kind: "seek",
+      direction: 1,
+      step: "beat",
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true }), {
+      kind: "seek",
+      direction: -1,
+      step: "beat",
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("default Alt+Shift wheel bindings zoom the timeline", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: 1,
     });
-    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true }), {
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,
     });
+  } finally {
+    dispose();
+  }
+});
+
+test("default Ctrl+Shift wheel bindings scroll multi-line panels horizontally", () => {
+  const dispose = registerEditorShortcuts();
+  try {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: -1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
+      direction: 1,
+    });
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true }), {
+      kind: "line",
+      direction: -1,
+    });
+  } finally {
+    dispose();
+  }
+});
+
+test("matched multi-line wheel delegates to the horizontal scroll handler", () => {
+  const dispose = registerEditorShortcuts();
+  const calls = [];
+  const event = {
+    deltaY: -100,
+    ctrlKey: true,
+    shiftKey: true,
+    preventDefault() {},
+    stopPropagation() {},
+  };
+  try {
+    const navigation = bindTimelineNavigation({
+      timeline: {
+        gestures: {},
+        viewport: { division: 4, minimumScrollSeconds: () => 0 },
+      },
+      session: () => ({ chart: { META: {} } }),
+      seekByBeats: () => {},
+      wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
+      lineSwitcher: { step() {} },
+      multiLineScroll: (received, direction) => {
+        calls.push([received, direction]);
+        return true;
+      },
+    });
+    assert.equal(navigation.wheel(event), true);
+    assert.deepEqual(calls, [[event, -1]]);
   } finally {
     dispose();
   }
@@ -65,9 +135,9 @@ test("a rebound zoom shortcut keeps its configured direction", () => {
   const zoomOut = TIMELINE_WHEEL_SHORTCUT_IDS.zoomOut;
   const zoomIn = TIMELINE_WHEEL_SHORTCUT_IDS.zoomIn;
   try {
-    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, ["ALT+WHEELUP"]).ok, true);
+    assert.equal(shortcutRegistry.replaceAllBindings(zoomOut, ["ALT+SHIFT+WHEELUP"]).ok, true);
     assert.equal(shortcutRegistry.replaceAllBindings(zoomIn, []).ok, true);
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true }), {
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,
     });
@@ -118,21 +188,19 @@ test("a custom Alt wheel seek binding does not also zoom the timeline", () => {
   }
 });
 
-test("Shift wheel is a separate whole-beat seek binding", () => {
+test("Shift wheel remains unbound by default so it remains available for selection", () => {
   const dispose = registerEditorShortcuts();
   try {
-    assert.deepEqual(matchTimelineWheel({ deltaY: 100, shiftKey: true }), {
-      kind: "seek",
+    assert.equal(matchTimelineWheel({ deltaY: 100, shiftKey: true }), null);
+    assert.equal(matchTimelineWheel({ deltaY: -100, shiftKey: true }), null);
+    assert.deepEqual(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
       direction: -1,
-      step: "beat",
     });
-    assert.deepEqual(matchTimelineWheel({ deltaY: -100, shiftKey: true }), {
-      kind: "seek",
+    assert.deepEqual(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), {
+      kind: "multiLineScroll",
       direction: 1,
-      step: "beat",
     });
-    assert.equal(matchTimelineWheel({ deltaY: -100, ctrlKey: true, shiftKey: true }), null);
-    assert.equal(matchTimelineWheel({ deltaY: 100, ctrlKey: true, shiftKey: true }), null);
     assert.deepEqual(matchTimelineWheel({ deltaY: 100, altKey: true, shiftKey: true }), {
       kind: "zoom",
       direction: -1,
@@ -175,10 +243,10 @@ test("a fast seek binding moves by one beat and a grid binding keeps the grid st
       wheelSettings: () => ({ scrollSpeed: 1, scrollAcceleration: false }),
       lineSwitcher: { step() {} },
     });
-    const wheel = (deltaY, shiftKey = false) => ({
+    const wheel = (deltaY, altKey = false) => ({
       deltaY,
       deltaMode: 0,
-      shiftKey,
+      altKey,
       preventDefault() {},
       stopPropagation() {},
     });
@@ -217,6 +285,43 @@ test("the shortcut recorder commits wheel directions and mouse buttons", () => {
     event: { button: 3 },
   });
   assert.deepEqual(releasedPointer.commit, { key: "MOUSE3", modifiers: ["SHIFT"] });
+});
+
+test("wheel capture latches its direction across idle wheel events", () => {
+  const first = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "wheel",
+    event: { deltaY: -100 },
+  });
+  assert.deepEqual(first.commit, { key: "WHEELUP", modifiers: [] });
+  assert.deepEqual(first.state.candidate, { key: "WHEELUP", modifiers: [] });
+
+  const idle = advanceShortcutCapture(first.state, {
+    type: "wheel",
+    event: { deltaY: 0, deltaX: 0 },
+  });
+  assert.equal(idle.commit, null);
+  assert.deepEqual(idle.state.candidate, first.state.candidate);
+  assert.deepEqual(idle.state.preview, first.state.preview);
+});
+
+test("wheel capture keeps a modifier chord until the modifier is released", () => {
+  let state = advanceShortcutCapture(createShortcutCaptureState(), {
+    type: "keydown",
+    event: { key: "Control", code: "ControlLeft", ctrlKey: true },
+  }).state;
+  const wheel = advanceShortcutCapture(state, {
+    type: "wheel",
+    event: { deltaY: 100, ctrlKey: true },
+  });
+  assert.deepEqual(wheel.commit, { key: "WHEELDOWN", modifiers: ["CTRL"] });
+  assert.deepEqual(wheel.state.candidate, wheel.commit);
+
+  state = advanceShortcutCapture(wheel.state, {
+    type: "keyup",
+    event: { key: "Control", code: "ControlLeft" },
+  });
+  assert.deepEqual(state.commit, { key: "WHEELDOWN", modifiers: ["CTRL"] });
+  assert.deepEqual(state.state, createShortcutCaptureState());
 });
 
 test("a mouse binding commits when the button is released while its modifier is held", () => {

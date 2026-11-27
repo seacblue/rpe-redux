@@ -22,6 +22,9 @@ export function drawNoteLanes(
   width: number,
   height: number,
 ): void {
+  if (receiver.viewport.snapX === false) {
+    return;
+  }
   const key = noteLaneLayerKey(receiver, width, height);
   const layer = receiver.cache.canvasLayer(
     receiver.notesBackdrop,
@@ -63,6 +66,7 @@ function noteLaneLayerKey(
     width,
     height,
     receiver.viewport.gridCount,
+    receiver.viewport.snapX,
     grid.first,
     grid.spacing,
     grid.lineCount,
@@ -134,22 +138,32 @@ function drawNoteLanesInto(
       const local = inset + ((lane - cameraX - NOTE_X_MIN) / NOTE_X_SPAN) * contentWidth;
       return panel * panelStride - panelOffset + Math.max(0, Math.min(panelWidth, local));
     };
-    const guidePositions: number[] = [];
+    const panelLeft = panel * panelStride - panelOffset;
+    const panelRight = panelLeft + panelWidth;
+    const guides: Array<{ lane: number; horizontal: number }> = [];
     for (let index = firstGrid; index <= lastGrid; index++) {
-      guidePositions.push(horizontalForLane((index + grid.first) * grid.spacing));
+      const lane = (index + grid.first) * grid.spacing;
+      const horizontal = horizontalForLane(lane);
+      if (horizontal <= panelLeft || horizontal >= panelRight) {
+        continue;
+      }
+      guides.push({ lane, horizontal });
     }
     const panelPointer =
       mergedNotes || hover?.lineIndex === lineIndex ? (hover?.pointer ?? null) : null;
     const hoveredPosition =
-      panelPointer !== null ? nearestPixelGuidePosition(guidePositions, panelPointer.x) : null;
-    for (let index = firstGrid; index <= lastGrid; index++) {
-      const lane = (index + grid.first) * grid.spacing;
+      panelPointer !== null
+        ? nearestPixelGuidePosition(
+            guides.map(({ horizontal }) => horizontal),
+            panelPointer.x,
+          )
+        : null;
+    for (const { lane, horizontal } of guides) {
       const center = Math.abs(lane) < 1e-7;
       const baseColor = center
         ? receiver.appearance.verticalGridCenterColor
         : receiver.appearance.verticalGridColor;
       context.lineWidth = center ? 2 : 1;
-      const horizontal = horizontalForLane(lane);
       const highlighted = hoveredPosition !== null && Math.abs(horizontal - hoveredPosition) < 1e-7;
       context.strokeStyle =
         highlighted && receiver.appearance.hoverGuidesEnabled !== false

@@ -5,7 +5,7 @@
  * 5xx responses.
  */
 import { createHash } from "node:crypto";
-import { createReadStream, createWriteStream, renameSync, rmSync } from "node:fs";
+import { createReadStream, createWriteStream, renameSync, rmSync, statSync } from "node:fs";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
@@ -75,7 +75,7 @@ export async function hashFile(path) {
 }
 
 /**
- * Download `url` to `destination` until the file hashes to `expectedHash`.
+ * Download `url` to `destination` and verify the bytes when a digest is known.
  *
  * Transient failures (5xx responses, dropped connections, timeouts, and
  * checksum mismatches from a truncated transfer) are retried with exponential
@@ -86,7 +86,8 @@ export async function hashFile(path) {
  * @param {object} options
  * @param {string} options.url Absolute download URL of the published artifact.
  * @param {string} options.destination Final file path.
- * @param {string} options.expectedHash Lowercase SHA-256 hex digest to enforce.
+ * @param {string | null} [options.expectedHash] Lowercase SHA-256 hex digest to enforce.
+ * @param {number | null} [options.expectedSize] Byte count to enforce when no digest is available.
  * @param {string} options.label Human-readable artifact name used in messages.
  * @param {number} [options.attempts] Total attempts, including the first one.
  * @param {number} [options.baseDelayMs] First backoff step; later attempts double it.
@@ -94,7 +95,8 @@ export async function hashFile(path) {
 export async function downloadVerifiedFile({
   url,
   destination,
-  expectedHash,
+  expectedHash = null,
+  expectedSize = null,
   label,
   attempts = 4,
   baseDelayMs = 5_000,
@@ -113,11 +115,15 @@ export async function downloadVerifiedFile({
         progressReporter(label, total),
         createWriteStream(partial),
       );
-      if ((await hashFile(partial)) !== expectedHash) {
+      const actualHash = await hashFile(partial);
+      if (expectedHash && actualHash !== expectedHash) {
         throw new Error(`${label} download checksum mismatch.`);
       }
+      if (expectedSize !== null && statSync(partial).size !== expectedSize) {
+        throw new Error(`${label} download size mismatch.`);
+      }
       renameSync(partial, destination);
-      return;
+      return { sha256: actualHash, size: statSync(destination).size };
     } catch (error) {
       rmSync(partial, { force: true });
       lastError = error;

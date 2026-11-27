@@ -130,9 +130,9 @@
   // already selected rows, and the transparent wash keeps text readable. The
   // inline box carries both axes so this is a true pointer rectangle.
   z-index: 2;
-  border: 1px dashed color-mix(in srgb, var(--accent) 72%, transparent);
-  border-radius: var(--design-radius-micro);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--line-selection-marquee-stroke);
+  border-radius: 0;
+  background: var(--line-selection-marquee-fill);
   pointer-events: none;
 }
 
@@ -336,6 +336,20 @@
   transition:
     background-color var(--design-dur-tint) ease,
     color var(--design-dur-tint) ease;
+}
+
+// Pointer selection already has a selected/current surface; do not add the
+// heavy rounded browser focus ring on top of it. Keyboard navigation keeps a
+// quiet inset edge so the row remains discoverable without competing with the
+// selection state.
+.line-selection-row:focus-visible {
+  outline: 1px solid var(--edge-emphasis);
+  outline-offset: -1px;
+}
+
+:root[data-input-mode="pointer"] .line-selection-row:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .line-selection-row:hover {

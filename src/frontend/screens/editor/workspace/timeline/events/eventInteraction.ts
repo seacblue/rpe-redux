@@ -18,23 +18,25 @@ import { t } from "../../../../../../i18n/index.ts";
 import type { LineEventValue } from "../../../../../../core/global/chart/chart.ts";
 import { eventTypeAt } from "../drawing/tracks.ts";
 import { eventColumnForTrack } from "./eventColumns.ts";
-import {
-  eventKey,
-  eventListAt,
-  eventList,
-} from "../../../../../../core/edit/events/eventTracks.ts";
+import { eventKey, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import { placeEventAtBeatTarget } from "../../../../../../core/edit/events/eventCommands.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
 import type {
   TimelineEventDrag,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
-import { captureEventBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
+import {
+  captureEventBaseline,
+  eventSelectionGeometry,
+  marqueeHistoryKey,
+} from "../selection/rectangleSelection.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
 } from "../../../../../overlays/overlap/overlapMenu.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
+import { SELECTION_SHORTCUT_IDS } from "../../../../../../core/edit/selection/control.ts";
+import { matchesSelectionShortcut } from "../selection/selectionShortcuts.ts";
 import {
   clearEventSelectionAnchor,
   reconcileEventSelectionAnchor,
@@ -287,7 +289,7 @@ export class EventInteraction implements EventInteractionHandle {
 
   /** Handle an event-field press: selection, marquee start, placement, or pan. */
   down(event: PointerEvent): void {
-    if (![0, 1, 2].includes(event.button)) {
+    if (![0, 2].includes(event.button)) {
       return;
     }
     event.preventDefault?.();
@@ -295,13 +297,46 @@ export class EventInteraction implements EventInteractionHandle {
       return;
     }
     const session = this.timeline.getSession();
-    if (event.button === 0 && !event.ctrlKey && !event.shiftKey) {
+    const selectEvent = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.event,
+      event,
+      "events",
+      "timeline",
+      event.target,
+    );
+    const toggleSelection = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.toggle,
+      event,
+      "events",
+      "timeline",
+      event.target,
+    );
+    const marqueeSelection = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.marquee,
+      event,
+      "events",
+      "timeline",
+      event.target,
+    );
+    const marqueeRemove = matchesSelectionShortcut(
+      SELECTION_SHORTCUT_IDS.marqueeRemove,
+      event,
+      "events",
+      "timeline",
+      event.target,
+    );
+    if (selectEvent) {
       session.marqueeSelection = null;
     }
     if (event.button === 0) {
       session.selectionRevision += 1;
     }
     const point = this.timeline.viewport.point(event, this.canvas);
+    this.timeline.gestures.cursorLineIndex = this.timeline.viewport.lineIndexAt(
+      point.x,
+      this.canvas.clientWidth,
+      "events",
+    );
     const rectangle = this.hit(point);
     const dragPrekey = dragPrekeyHeld();
     const multiMode = session.multiLineActive;
@@ -365,7 +400,7 @@ export class EventInteraction implements EventInteractionHandle {
     if (event.button === 2) {
       return;
     }
-    if (event.ctrlKey || event.shiftKey || event.button === 1) {
+    if (toggleSelection || marqueeSelection || marqueeRemove) {
       session.multiSelectionIntent = "events";
     } else {
       session.multiSelectionIntent = null;
@@ -373,13 +408,7 @@ export class EventInteraction implements EventInteractionHandle {
     this.timeline.gestures.eventCursor = point;
     this.timeline.gestures.hoverArea = "events";
     this.timeline.gestures.clipboardPointer = point;
-    if (
-      event.button === 0 &&
-      !event.ctrlKey &&
-      !event.shiftKey &&
-      !this.timeline.gestures.tool &&
-      !this.pending
-    ) {
+    if (selectEvent && !this.timeline.gestures.tool && !this.pending) {
       const overlapping = this.hits(point);
       if (overlapping.length > 1) {
         const canvas = this.canvas;
@@ -415,11 +444,12 @@ export class EventInteraction implements EventInteractionHandle {
         ? this.timeline.viewport.lineIndexAt(point.x, this.canvas.clientWidth, "events")
         : session.lineIndex;
     if (
-      event.button === 0 &&
+      selectEvent &&
       this.timeline.gestures.tool &&
       !rectangle &&
-      !event.shiftKey &&
-      !event.ctrlKey
+      !toggleSelection &&
+      !marqueeSelection &&
+      !marqueeRemove
     ) {
       try {
         this.place(null);
@@ -443,7 +473,7 @@ export class EventInteraction implements EventInteractionHandle {
       return;
     }
     session.focus = "events";
-    if (!panBlank && !event.ctrlKey && !event.shiftKey && event.button !== 1) {
+    if (!panBlank && !toggleSelection && !marqueeSelection && !marqueeRemove) {
       session.selection.clear();
       if (session.multiLineActive && session.multiLineMode === "events") {
         session.multiEventSelection.clear();
@@ -458,7 +488,7 @@ export class EventInteraction implements EventInteractionHandle {
       this.canvas.focus({ preventScroll: true });
     }
     this.canvas.setPointerCapture(event.pointerId);
-    if (multiMode && (event.shiftKey || event.button === 1)) {
+    if (multiMode && (marqueeSelection || marqueeRemove)) {
       const worldX =
         point.x + this.timeline.viewport.multiLineViewportOffset(this.canvas.clientWidth, "events");
       this.drag = {
@@ -475,7 +505,7 @@ export class EventInteraction implements EventInteractionHandle {
           (this.timeline.viewport.viewHeight() - this.timeline.viewport.judgementOffset - point.y) /
             this.timeline.viewport.scaleForArea("events"),
         append: true,
-        remove: event.altKey,
+        remove: marqueeRemove,
         historyKey: marqueeHistoryKey(session),
         ...captureEventBaseline(session, true),
       };
@@ -485,9 +515,9 @@ export class EventInteraction implements EventInteractionHandle {
         pointerId: event.pointerId,
         start: point,
         current: point,
-        clearOnClick: !event.ctrlKey && !event.shiftKey,
+        clearOnClick: !toggleSelection && !marqueeSelection && !marqueeRemove,
       };
-    } else if (!multiMode && (event.shiftKey || event.button === 1)) {
+    } else if (!multiMode && (marqueeSelection || marqueeRemove)) {
       this.drag = {
         kind: "rectangle",
         area: "events",
@@ -500,14 +530,12 @@ export class EventInteraction implements EventInteractionHandle {
             this.timeline.viewport.scaleForArea("events"),
         current: point,
         append: true,
-        remove: event.altKey,
+        remove: marqueeRemove,
         historyKey: marqueeHistoryKey(session),
         ...captureEventBaseline(session, true),
       };
-    } else if (rectangle && event.button === 0) {
+    } else if (rectangle && (selectEvent || toggleSelection)) {
       const key = eventKey(rectangle.type, rectangle.index);
-      // A Ctrl edge press keeps the selection so the edge drag can commit.
-      const ctrlEdge = event.ctrlKey ? eventEdgeAt(rectangle, point) : null;
       if (
         session.multiLineActive &&
         session.multiLineMode === "events" &&
@@ -517,7 +545,7 @@ export class EventInteraction implements EventInteractionHandle {
           session.multiEventSelection.get(rectangle.lineIndex ?? session.lineIndex) ?? [],
         );
         const wasSelected = selected.has(key);
-        if (event.ctrlKey && !ctrlEdge) {
+        if (toggleSelection) {
           if (wasSelected) {
             selected.delete(key);
           } else {
@@ -531,24 +559,22 @@ export class EventInteraction implements EventInteractionHandle {
         if (rectangle.lineIndex === session.lineIndex) {
           session.eventSelection = new Set(selected);
         }
-        if (event.ctrlKey && !ctrlEdge && wasSelected) {
+        if (toggleSelection && wasSelected) {
           reconcileEventSelectionAnchor(session);
         } else {
           rememberEventSelection(session, rectangle.lineIndex ?? session.lineIndex, key);
         }
       } else {
-        if (event.ctrlKey && !ctrlEdge) {
+        if (toggleSelection) {
           if (session.eventSelection.has(key)) {
             session.eventSelection.delete(key);
           } else {
             session.eventSelection.add(key);
           }
-        } else if (ctrlEdge) {
-          session.eventSelection.add(key);
         } else if (!session.eventSelection.has(key)) {
           session.eventSelection = new Set([key]);
         }
-        if (event.ctrlKey && !ctrlEdge && !session.eventSelection.has(key)) {
+        if (toggleSelection && !session.eventSelection.has(key)) {
           reconcileEventSelectionAnchor(session);
         } else {
           rememberEventSelection(session, session.lineIndex, key);
@@ -557,10 +583,14 @@ export class EventInteraction implements EventInteractionHandle {
       const hasSelection =
         session.eventSelection.size > 0 ||
         [...session.multiEventSelection.values()].some((selection) => selection.size > 0);
-      session.selectionMode = !hasSelection ? "none" : event.ctrlKey ? "multi" : "single";
-      // Z trims the head from anywhere; Ctrl+left trims the head of an edge
-      // press; a plain press near an edge trims the edge under the pointer.
-      const edgeKind = dragPrekey || ctrlEdge ? "startTime" : eventEdgeAt(rectangle, point);
+      session.selectionMode = !hasSelection ? "none" : toggleSelection ? "multi" : "single";
+      // Z trims the head from anywhere; a plain press near an edge trims the
+      // edge under the pointer. Ctrl+left remains exclusively selection toggle.
+      const edgeKind = toggleSelection
+        ? null
+        : dragPrekey
+          ? "startTime"
+          : eventEdgeAt(rectangle, point);
       if (edgeKind) {
         const edgeDrag = eventEdgeDragFor(
           this.timeline,
@@ -581,6 +611,11 @@ export class EventInteraction implements EventInteractionHandle {
   /** Track the hover cursor and advance the active event drag. */
   move(event: PointerEvent): void {
     const point = this.timeline.viewport.point(event, this.canvas);
+    this.timeline.gestures.cursorLineIndex = this.timeline.viewport.lineIndexAt(
+      point.x,
+      this.canvas.clientWidth,
+      "events",
+    );
     this.timeline.gestures.eventCursor = point;
     this.timeline.gestures.clipboardPointer = point;
     this.timeline.gestures.hoverArea = "events";
@@ -720,26 +755,7 @@ export class EventInteraction implements EventInteractionHandle {
             baseNotes: drag.baselineNotes,
             baseEvents: drag.baselineEvents,
           },
-          {
-            rectangles: this.timeline.gestures.eventRects,
-            scroll: this.timeline.viewport.multiLineViewportOffset(
-              this.canvas.clientWidth,
-              "events",
-            ),
-            eventTypes: this.timeline.eventTypes,
-            columnBounds: (channel) =>
-              this.timeline.viewport.eventColumnBounds(channel, this.canvas.clientWidth),
-            eventsInRange: (type, start, end) => {
-              const session = this.timeline.getSession();
-              return this.timeline.cache.eventEntries(
-                session.chart,
-                eventList(session, type),
-                start,
-                end,
-                this.timeline.viewport.gridCount,
-              );
-            },
-          },
+          eventSelectionGeometry(this.timeline, this.canvas.clientWidth),
         );
       } else {
         commitEventEdgeDrag(session, drag, delta);

@@ -101,6 +101,7 @@ test("the completeness check accepts a facade built from the registry", () => {
   assert.equal(lookupMethod("chart", "lineGroups")?.capability, "chart.read");
   assert.equal(lookupMethod("chart", "notes")?.capability, "chart.read");
   assert.equal(lookupMethod("chart", "events")?.capability, "chart.read");
+  assert.equal(lookupMethod("chart", "beats.addFraction")?.capability, "chart.read");
   assert.equal(lookupMethod("recipe", "plan")?.capability, "chart.write");
   assert.equal(lookupMethod("library", "current.createRevision")?.capability, "library.write");
   assert.equal(lookupMethod("", "ui.notice")?.capability, "ui.notice");
@@ -173,7 +174,7 @@ test("the completeness check rejects an unregistered nested method", () => {
 });
 
 test("the capability vocabulary stays under the charter cap and excludes universal names", () => {
-  assert.ok(EXTENSION_CAPABILITIES.length <= 36);
+  assert.ok(EXTENSION_CAPABILITIES.length <= 38);
   for (const capability of EXTENSION_CAPABILITIES) {
     if (capability === "host.patch") {
       continue;
@@ -191,7 +192,7 @@ test("the capability vocabulary stays under the charter cap and excludes univers
 });
 
 test("the capability catalog covers all names and consent excludes host.patch", () => {
-  assert.equal(EXTENSION_CAPABILITIES.length, 35);
+  assert.equal(EXTENSION_CAPABILITIES.length, 38);
   assert.equal(CAPABILITY_CATALOG.length, EXTENSION_CAPABILITIES.length);
   assert.deepEqual(
     CAPABILITY_CATALOG.map((row) => row.capability),
@@ -229,7 +230,7 @@ test("the capability catalog covers all names and consent excludes host.patch", 
 
   const grantable = EXTENSION_CAPABILITIES.filter((capability) => capability !== "host.patch");
   assert.equal(CAPABILITY_CONSENT_ROWS.length, grantable.length);
-  assert.equal(CAPABILITY_CONSENT_ROWS.length, 34);
+  assert.equal(CAPABILITY_CONSENT_ROWS.length, 37);
   assert.deepEqual(
     CAPABILITY_CONSENT_ROWS.map((row) => row.capability),
     grantable,

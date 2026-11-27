@@ -21,12 +21,13 @@ import {
   releaseShortcutKey,
 } from "../../../core/shortcuts/inputKeys.ts";
 import {
-  advancePrefixDigitSequence,
-  createPrefixDigitSequenceState,
-  type PrefixDigitModifier,
-  type PrefixDigitSequenceState,
-  type PrefixDigitSequenceSubmission,
-} from "../../../core/shortcuts/prefixDigitSequence.ts";
+  advancePrefixSequence,
+  createPrefixSequenceState,
+  type PrefixSequenceModifier,
+  type PrefixSequenceState,
+  type PrefixSequenceSubmission,
+  type PrefixSequenceTokenReader,
+} from "../../../core/shortcuts/prefixSequence.ts";
 import { normalizeShortcutKey } from "../../../core/shortcuts/keys.ts";
 import { isWindowBlur, releaseShortcutFocus } from "./focus.ts";
 import {
@@ -53,7 +54,7 @@ export interface EditorKeyboardBindingDependencies extends Omit<
 > {
   timeline: Pick<
     Timeline,
-    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement"
+    "viewport" | "gestures" | "eventTypes" | "addAtCursor" | "cancelPlacement" | "quickPickAtCursor"
   >;
   scope: ResourceScope;
   batchControlsActive: () => boolean;
@@ -74,14 +75,15 @@ export interface EditorKeyboardBindingDependencies extends Omit<
    * Ctrl+Z would also undo the chart underneath it.
    */
   claimDraftShortcut?: (event: KeyboardEvent) => boolean;
-  /** Configure one passive prefix-digit shortcut handled by the dispatcher. */
-  prefixDigitShortcut: PrefixDigitShortcutBinding;
+  /** Configure one passive prefix sequence handled by the dispatcher. */
+  prefixSequenceShortcut: PrefixSequenceShortcutBinding;
 }
 
-/** A generic prefix-digit binding whose result is interpreted by its owner. */
-export interface PrefixDigitShortcutBinding {
+/** A generic prefix-sequence binding whose result is interpreted by its owner. */
+export interface PrefixSequenceShortcutBinding {
   readonly id: string;
-  readonly submit: (submission: PrefixDigitSequenceSubmission) => void;
+  readonly submit: (submission: PrefixSequenceSubmission) => void;
+  readonly tokenOf?: PrefixSequenceTokenReader;
 }
 
 /** Stable identity for one physical input across its down and up events. */
@@ -102,20 +104,21 @@ function trackInputUp(event: KeyboardEvent | PointerEvent): void {
   releaseShortcutKey(inputIdentity(event));
 }
 
-/** Resolve the configured bare modifier for one prefix-digit shortcut. */
-function configuredPrefix(id: string): PrefixDigitModifier | null {
-  const modifiers = new Set<PrefixDigitModifier>(["CTRL", "ALT", "SHIFT", "META"]);
+/** Resolve the configured bare modifier for one prefix-sequence shortcut. */
+function configuredPrefix(id: string): PrefixSequenceModifier | null {
+  const modifiers = new Set<PrefixSequenceModifier>(["CTRL", "ALT", "SHIFT", "META"]);
   return (
     shortcutRegistry
       .bindingsOf(id)
       .map((binding) => normalizeShortcutKey(binding.key))
-      .find((key): key is PrefixDigitModifier => modifiers.has(key as PrefixDigitModifier)) ?? null
+      .find((key): key is PrefixSequenceModifier => modifiers.has(key as PrefixSequenceModifier)) ??
+    null
   );
 }
 
 /** Registers the one keyboard dispatcher and its pointer/wheel canvas routing. */
 export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDependencies): void {
-  let prefixDigitState: PrefixDigitSequenceState = createPrefixDigitSequenceState();
+  let prefixSequenceState: PrefixSequenceState = createPrefixSequenceState();
   const keyboardDeps: EditorKeyboardActionDependencies = {
     ...deps,
     timeline: {
@@ -128,6 +131,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       get eventTypes() {
         return deps.timeline.eventTypes;
       },
+      quickPickAtCursor: () => deps.timeline.quickPickAtCursor(),
       get eventInteraction() {
         return deps.timeline.gestures.eventInteraction;
       },
@@ -199,7 +203,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         // The recorder and urgent dialogs own their input; a key they capture
         // must not leak into the next chord the editor sees.
         clearShortcutKeys();
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
         return;
       }
       trackInputDown(event);
@@ -208,7 +212,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         context.modal === "none" &&
         (claimKey(event, context) || deps.claimDraftShortcut?.(event))
       ) {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
         event.preventDefault();
         return;
       }
@@ -280,27 +284,28 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         scope !== "app" &&
         scope !== "instrument"
       ) {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
         event.preventDefault();
         return;
       }
       const shortcutId = editorAction ?? registered?.id ?? "";
       if (shortcutId) {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
       } else if (
         context.documentOpen &&
         context.modal === "none" &&
         !context.textEntry &&
         context.surface === null
       ) {
-        const prefix = configuredPrefix(deps.prefixDigitShortcut.id);
+        const prefix = configuredPrefix(deps.prefixSequenceShortcut.id);
         if (prefix) {
-          const transition = advancePrefixDigitSequence(
-            prefixDigitState,
+          const transition = advancePrefixSequence(
+            prefixSequenceState,
             { type: "keydown", event },
             prefix,
+            deps.prefixSequenceShortcut.tokenOf,
           );
-          prefixDigitState = transition.state;
+          prefixSequenceState = transition.state;
           if (transition.handled) {
             event.preventDefault();
             event.stopPropagation();
@@ -308,7 +313,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
           }
         }
       } else {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
       }
       if (shortcutId) {
         window.dispatchEvent(new Event(SHORTCUT_DISPATCHED_EVENT));
@@ -400,22 +405,23 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
         context.textEntry ||
         context.surface !== null
       ) {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
         return;
       }
-      const prefix = configuredPrefix(deps.prefixDigitShortcut.id);
+      const prefix = configuredPrefix(deps.prefixSequenceShortcut.id);
       if (!prefix) {
-        prefixDigitState = createPrefixDigitSequenceState();
+        prefixSequenceState = createPrefixSequenceState();
         return;
       }
-      const transition = advancePrefixDigitSequence(
-        prefixDigitState,
+      const transition = advancePrefixSequence(
+        prefixSequenceState,
         { type: "keyup", event },
         prefix,
+        deps.prefixSequenceShortcut.tokenOf,
       );
-      prefixDigitState = transition.state;
+      prefixSequenceState = transition.state;
       if (transition.submission && transition.submission.kind !== "empty") {
-        deps.prefixDigitShortcut.submit(transition.submission);
+        deps.prefixSequenceShortcut.submit(transition.submission);
       }
     },
     true,
@@ -432,7 +438,7 @@ export function registerEditorKeyboardBindings(deps: EditorKeyboardBindingDepend
       clearShortcutKeys();
       releaseHeldShortcuts();
       deferredZ = null;
-      prefixDigitState = createPrefixDigitSequenceState();
+      prefixSequenceState = createPrefixSequenceState();
     },
     true,
   );

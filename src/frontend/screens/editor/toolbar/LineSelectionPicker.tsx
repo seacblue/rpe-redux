@@ -1,10 +1,11 @@
 /**
  * Toolbar judge-line selector with folder groups.
  *
- * A plain click replaces the selection, shift-click toggles one line, and
- * shift-drag previews a marquee that commits on release. A folder row batch
- * toggles its lines; its disclosure only folds. Folder disclosure persists;
- * selection is document state and never becomes empty.
+ * A plain click replaces the selection, Ctrl/Cmd-click toggles one line, and
+ * Shift-click extends a range from firstLine and moves focus to the click. Any left drag previews a
+ * marquee that commits on release. A folder row batch toggles its lines; its
+ * disclosure only folds. Folder disclosure persists; selection is document
+ * state and never becomes empty.
  */
 import {
   useCallback,
@@ -14,7 +15,6 @@ import {
   useState,
   useSyncExternalStore,
   type CSSProperties,
-  type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
@@ -25,6 +25,7 @@ import { useAnchoredPopover } from "../../../../design/patterns/useAnchoredPopov
 import { useTranslation } from "../../../../i18n/react.ts";
 import { values } from "../../../../core/state/values.ts";
 import type { EditorLineOption } from "../../../../core/edit/state/publishedValues.ts";
+import { readTimelineNoteMarqueeColors } from "../canvas/palette.ts";
 import { setSelectedLineIndices } from "../../global/sections/lines/lineSelectionMode.ts";
 import { LineSelectionGroupHeader } from "../lineSelection/LineSelectionGroupHeader.tsx";
 import { groupLineEntries, type LineGroupEntries } from "../lineSelection/lineGroupEntries.ts";
@@ -49,12 +50,17 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
+  resolveMarqueeFocusLine,
   type MarqueeBox,
   type MarqueeDrag,
   type MarqueePoint,
 } from "./lineSelectionMarquee.ts";
+import type {
+  ListSelectionModifiers,
+  ListSelectionState,
+} from "../../../../design/patterns/list/listSelection.ts";
 
-type RowKeys = Pick<MouseEvent<HTMLButtonElement>, "shiftKey">;
+type RowKeys = ListSelectionModifiers;
 
 type LineGroup = LineGroupEntries<EditorLineOption>;
 
@@ -88,7 +94,9 @@ export function LineSelectionPicker({
   const marqueeStartContent = useRef<MarqueePoint>({ x: 0, y: 0 });
   const marqueeDrag = useRef<MarqueeDrag | null>(null);
   const marqueeFrame = useRef<number | null>(null);
+  const marqueeMoved = useRef(false);
   const suppressClick = useRef(false);
+  const selectionStateRef = useRef<ListSelectionState<number> | null>(null);
   const [open, setOpen] = useState(false);
   const anchorElement = useRef<HTMLElement | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeBox | null>(null);
@@ -183,6 +191,12 @@ export function LineSelectionPicker({
       return;
     }
     const currentNow = Number(values.byId.get<string>("editor.line") ?? 0);
+    const focus = Number.isInteger(currentNow) ? currentNow : 0;
+    selectionStateRef.current = {
+      selection: [...selectionRef.current],
+      firstLine: focus,
+      focus,
+    };
     initialScrollIndex.current = Number.isFinite(currentNow) ? currentNow : null;
     anchorElement.current = target;
     setOpen(true);
@@ -249,34 +263,36 @@ export function LineSelectionPicker({
     values.byId.set<string>("editor.line", String(focused));
   };
 
-  /**
-   * Toggle one row. The only selected line is protected: asking to remove it
-   * behaves as an add instead, so the selector can never become empty.
-   */
-  const toggleLine = (index: number) => {
+  /** Apply one pointer click using plain, Ctrl/Cmd, and Shift list semantics. */
+  const pick = (index: number, keys: RowKeys) => {
     const baseSelection = [...selectionRef.current];
+    const currentNow = Number(values.byId.get<string>("editor.line") ?? current);
+    const state =
+      selectionStateRef.current ??
+      ({
+        selection: baseSelection,
+        firstLine: currentNow,
+        focus: currentNow,
+      } satisfies ListSelectionState<number>);
     const latestTokens =
       values.byId.get<readonly LineSelectionToken[]>("editor.lineTokens") ?? tokens;
     const baseTokens = tokensForSelection(latestTokens, baseSelection, available, selectionGroups);
     const next = lineBarSelectionAfterClick(
-      current,
+      currentNow,
       baseSelection,
       index,
-      true,
+      keys,
       baseTokens,
       available,
       selectionGroups,
+      state.firstLine,
     );
+    selectionStateRef.current = {
+      selection: next.selection,
+      firstLine: next.firstLine,
+      focus: next.focus,
+    };
     applySelection(new Set(next.selection), next.current, next.tokens);
-  };
-
-  /** Plain click: this line is the whole selection. Shift: toggle it. */
-  const pick = (index: number, keys: RowKeys) => {
-    if (keys.shiftKey) {
-      toggleLine(index);
-      return;
-    }
-    applySelection(new Set([index]), index, [{ kind: "line", line: index }]);
   };
 
   /** Toggle one folder's disclosure and persist the collapsed set. */
@@ -425,7 +441,7 @@ export function LineSelectionPicker({
    * pointer position even when no pointermove preceded it.
    */
   const beginMarquee = (event: ReactPointerEvent<HTMLElement>, index: number) => {
-    if (event.button !== 0 || !event.shiftKey) {
+    if (event.button !== 0) {
       return;
     }
     stopMarquee();
@@ -435,24 +451,54 @@ export function LineSelectionPicker({
       return;
     }
     const rect = container.getBoundingClientRect();
-    const drag = createMarqueeDrag(selectionRef.current, index, (preview) => {
-      const baseTokens = tokensForSelection(
-        tokens,
-        [...selectionRef.current],
-        available,
-        selectionGroups,
-      );
-      const nextTokens =
-        preview.mode === "add"
-          ? addLineSelection(baseTokens, preview.lines, available, selectionGroups)
-          : subtractLineSelection(baseTokens, preview.lines, available, selectionGroups);
-      const resolved = resolveLineSelection(nextTokens, available, selectionGroups);
-      const safe = resolved.length ? resolved : [preview.focus];
-      const safeTokens = resolved.length ? nextTokens : tokensFromLines(safe);
-      applySelection(new Set(safe), preview.focus, safeTokens);
-    });
+    const modifiers: ListSelectionModifiers = {
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    };
+    const drag = createMarqueeDrag(
+      selectionRef.current,
+      index,
+      (preview) => {
+        const baseTokens = tokensForSelection(
+          tokens,
+          [...selectionRef.current],
+          available,
+          selectionGroups,
+        );
+        const nextTokens =
+          preview.mode === "add"
+            ? addLineSelection(baseTokens, preview.lines, available, selectionGroups)
+            : preview.mode === "remove"
+              ? subtractLineSelection(baseTokens, preview.lines, available, selectionGroups)
+              : tokensFromLines([...preview.selection]);
+        const resolved = resolveLineSelection(nextTokens, available, selectionGroups);
+        const safe = resolved.length ? resolved : [preview.focus];
+        const safeTokens = resolved.length ? nextTokens : tokensFromLines(safe);
+        const currentNow = Number(values.byId.get<string>("editor.line") ?? preview.focus);
+        const state =
+          selectionStateRef.current ??
+          ({
+            selection: [...selectionRef.current],
+            firstLine: currentNow,
+            focus: currentNow,
+          } satisfies ListSelectionState<number>);
+        const firstLine = modifiers.shiftKey
+          ? resolveMarqueeFocusLine(currentNow, preview.lines, currentNow)
+          : (safe[0] ?? state.firstLine ?? state.focus ?? currentNow);
+        const focused = modifiers.shiftKey ? firstLine : (state.focus ?? currentNow);
+        selectionStateRef.current = {
+          selection: safe,
+          firstLine,
+          focus: focused,
+        };
+        applySelection(new Set(safe), focused, safeTokens);
+      },
+      modifiers,
+    );
     marqueeActive.current = true;
     marqueeDrag.current = drag;
+    marqueeMoved.current = false;
     const start = {
       x: listContentX(event.clientX, rect.left, container.clientLeft),
       y: listContentY(event.clientY, rect.top, container.clientTop, container.scrollTop),
@@ -469,6 +515,9 @@ export function LineSelectionPicker({
       if (moveEvent.pointerId !== pointerId) {
         return;
       }
+      if (Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) >= 4) {
+        marqueeMoved.current = true;
+      }
       marqueePointer.current = { x: moveEvent.clientX, y: moveEvent.clientY };
       scheduleMarquee();
     };
@@ -479,8 +528,13 @@ export function LineSelectionPicker({
       const active = marqueeDrag.current;
       if (active) {
         marqueePointer.current = { x: finishEvent.clientX, y: finishEvent.clientY };
-        updateMarquee(false);
-        active.finish();
+        if (marqueeMoved.current) {
+          updateMarquee(false);
+          active.finish();
+        } else {
+          active.cancel();
+          pick(index, modifiers);
+        }
         suppressClick.current = true;
         window.setTimeout(() => {
           suppressClick.current = false;
@@ -556,16 +610,26 @@ export function LineSelectionPicker({
                   event.preventDefault();
                 }
               }}
+              onPointerDown={(event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement) || !target.closest("[data-line-index]")) {
+                  beginMarquee(event, -1);
+                }
+              }}
             >
               {marqueeRect && (
                 <span
                   className="line-selection-marquee"
-                  style={{
-                    top: marqueeRect.top,
-                    left: marqueeRect.left,
-                    width: marqueeRect.width,
-                    height: marqueeRect.height,
-                  }}
+                  style={
+                    {
+                      top: marqueeRect.top,
+                      left: marqueeRect.left,
+                      width: marqueeRect.width,
+                      height: marqueeRect.height,
+                      "--line-selection-marquee-fill": readTimelineNoteMarqueeColors().fill,
+                      "--line-selection-marquee-stroke": readTimelineNoteMarqueeColors().stroke,
+                    } as CSSProperties
+                  }
                   aria-hidden="true"
                 />
               )}

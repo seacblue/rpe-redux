@@ -1,6 +1,6 @@
 /** Reads a browser event as a key, a recorded binding, or a match against one. */
 import { isApplePlatform } from "../platform/environment.ts";
-import { normalizeShortcutKey, shortcutKeys } from "./keys.ts";
+import { normalizeShortcutKey, shortcutKeyFromCode, shortcutKeys } from "./keys.ts";
 import type { Modifier, Shortcut, ShortcutEventLike } from "./types.ts";
 
 /** Modifier tokens never join a held-key chord as ordinary keys. */
@@ -49,6 +49,10 @@ export function shortcutKey(event: ShortcutEventLike): string {
   if (typeof event.button === "number" && !event.key) {
     return `MOUSE${Math.max(0, Math.min(4, event.button))}`;
   }
+  const physicalKey = shortcutKeyFromCode(event.code);
+  if (physicalKey) {
+    return physicalKey;
+  }
   let key = String(event.key ?? "").toUpperCase();
   if (event.shiftKey) {
     const shiftNames: Record<string, string> = {
@@ -73,7 +77,7 @@ export function shortcutKey(event: ShortcutEventLike): string {
   }
   if (event.isComposing || ["PROCESS", "UNIDENTIFIED", "DEAD", ""].includes(key)) {
     const code = String(event.code ?? "").toUpperCase();
-    key = /^(KEY[A-Z]|DIGIT[0-9])$/.test(code) ? code.replace(/^(KEY|DIGIT)/, "") : code;
+    key = /^(KEY[A-Z])$/.test(code) ? code.replace(/^KEY/, "") : code;
     if (key === "BRACKETLEFT") {
       key = "LEFTBRACKET";
     }

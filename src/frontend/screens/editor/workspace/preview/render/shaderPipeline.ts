@@ -85,6 +85,15 @@ export interface ShaderRect {
 export interface ShaderPass {
   shader: string;
   values?: unknown;
+  sourceName?: string;
+  global?: boolean;
+  workspacePassId?: string;
+  /** Optional semantic layer selector backed by the preview mask atlas. */
+  mask?: {
+    readonly key: string;
+    readonly atlas: "layers" | "note-fields";
+    readonly selection: readonly [number, number, number, number];
+  };
 }
 
 /** One shader source to compile ahead of a render pass. */
@@ -137,6 +146,10 @@ const BUILTIN_UNIFORM_NAMES = new Set([
   "resolution",
   "rpeRectMin",
   "rpeRectMax",
+  "u_layerMask",
+  "u_layerMaskSelection",
+  "u_noteFieldMask",
+  "u_noteFieldMaskSelection",
 ]);
 
 /** The optional completion-status query from KHR_parallel_shader_compile. */
@@ -209,6 +222,8 @@ export class ShaderPipeline {
   private uploadedRevision?: number | null;
   private uploadedWidth?: number;
   private uploadedHeight?: number;
+  private maskTexture: WebGLTexture | null;
+  private noteFieldMaskTexture: WebGLTexture | null;
   /** Sources the current chart wants; everything else is released on retain. */
   private wantedSources = new Set<string>();
   /** Sources queued or waiting for their idle compile turn. */
@@ -252,6 +267,8 @@ export class ShaderPipeline {
     this.textureHeight = 0;
     this.sourceTexture =
       this.overlayTexture =
+      this.maskTexture =
+      this.noteFieldMaskTexture =
       this.pingTexture =
       this.pongTexture =
       this.framebuffer =
@@ -274,6 +291,8 @@ export class ShaderPipeline {
     this.programs = new Map();
     this.sourceTexture = null;
     this.overlayTexture = null;
+    this.maskTexture = null;
+    this.noteFieldMaskTexture = null;
     this.pingTexture = null;
     this.pongTexture = null;
     this.framebuffer = null;
@@ -378,12 +397,16 @@ export class ShaderPipeline {
     this.buffer = createCornerBuffer(gl, FULLSCREEN_QUAD);
     this.sourceTexture = gl.createTexture();
     this.overlayTexture = gl.createTexture();
+    this.maskTexture = gl.createTexture();
+    this.noteFieldMaskTexture = gl.createTexture();
     this.pingTexture = gl.createTexture();
     this.pongTexture = gl.createTexture();
     this.framebuffer = gl.createFramebuffer();
     for (const texture of [
       this.sourceTexture,
       this.overlayTexture,
+      this.maskTexture,
+      this.noteFieldMaskTexture,
       this.pingTexture,
       this.pongTexture,
     ]) {
@@ -422,6 +445,8 @@ export class ShaderPipeline {
       for (const texture of [
         this.sourceTexture,
         this.overlayTexture,
+        this.maskTexture,
+        this.noteFieldMaskTexture,
         this.pingTexture,
         this.pongTexture,
       ]) {
@@ -442,6 +467,8 @@ export class ShaderPipeline {
     this.programs.clear();
     this.sourceTexture = null;
     this.overlayTexture = null;
+    this.maskTexture = null;
+    this.noteFieldMaskTexture = null;
     this.pingTexture = null;
     this.pongTexture = null;
     this.framebuffer = null;
@@ -843,6 +870,7 @@ export class ShaderPipeline {
     height: number,
     rect: ShaderRect | null,
     resolution?: number[],
+    maskSelection?: readonly number[],
   ): void {
     const gl = this.context();
     const provided: Record<string, unknown> = isUniformValues(values)
@@ -893,6 +921,10 @@ export class ShaderPipeline {
       }
     };
     set("u_texture", 0);
+    set("u_layerMask", 1);
+    set("u_layerMaskSelection", maskSelection ?? [0, 0, 0, 0]);
+    set("u_noteFieldMask", 2);
+    set("u_noteFieldMaskSelection", maskSelection ?? [0, 0, 0, 0]);
     set("u_time", provided.u_time ?? provided.time ?? seconds);
     set("time", provided.time ?? provided.u_time ?? seconds);
     const screenSize = result.builtin
@@ -993,6 +1025,9 @@ export class ShaderPipeline {
     height: number,
     rect: ShaderRect,
     resolution: number[],
+    maskTexture: WebGLTexture | null,
+    noteFieldMaskTexture: WebGLTexture | null,
+    maskSelection?: readonly number[],
   ): void {
     const gl = this.context();
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -1014,7 +1049,12 @@ export class ShaderPipeline {
     }
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, inputTexture);
-    this.setUniforms(result, values, seconds, width, height, rect, resolution);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, maskTexture);
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, noteFieldMaskTexture);
+    gl.activeTexture(gl.TEXTURE0);
+    this.setUniforms(result, values, seconds, width, height, rect, resolution, maskSelection);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -1041,6 +1081,8 @@ export class ShaderPipeline {
       targetCanvas.height = height;
       this.resizeTexture(this.sourceTexture, width, height);
       this.resizeTexture(this.overlayTexture, width, height);
+      this.resizeTexture(this.maskTexture, width, height);
+      this.resizeTexture(this.noteFieldMaskTexture, width, height);
       this.resizeTexture(this.pingTexture, width, height);
       this.resizeTexture(this.pongTexture, width, height);
       this.textureWidth = width;
@@ -1094,6 +1136,8 @@ export class ShaderPipeline {
     inputLayer?: ShaderInputLayer | null,
     textureLimit?: { width: number; height: number } | null,
     frameSize?: ShaderFrameSize | null,
+    maskCanvas?: HTMLCanvasElement | null,
+    noteFieldMaskCanvas?: HTMLCanvasElement | null,
   ): boolean {
     renderProfileMark("preview.shader.render.start");
     this.lastFrameMetrics.sourceUploadMs = 0;
@@ -1124,6 +1168,13 @@ export class ShaderPipeline {
       height: displayHeight,
       scale: 1,
     };
+    const hasMaskPass = passes.some((pass) => pass.mask !== undefined);
+    if (hasMaskPass && maskCanvas && this.maskTexture) {
+      this.uploadCanvas(this.maskTexture, maskCanvas, width, height);
+    }
+    if (hasMaskPass && noteFieldMaskCanvas && this.noteFieldMaskTexture) {
+      this.uploadCanvas(this.noteFieldMaskTexture, noteFieldMaskCanvas, width, height);
+    }
     const rect = shaderViewport(view, displayWidth, displayHeight);
     const resolution = [view.width / (view.scale || 1), view.height / (view.scale || 1)];
     const canReuseUpload =
@@ -1266,6 +1317,9 @@ export class ShaderPipeline {
         height,
         rect,
         resolution,
+        this.maskTexture,
+        this.noteFieldMaskTexture,
+        pass.mask?.selection,
       );
       rendered++;
       if (!final) {

@@ -43,6 +43,7 @@ type ViewportSettings = Pick<
   | "scale"
   | "division"
   | "snapX"
+  | "snapY"
   | "multiLineWindowWidth"
   | "scrollSpeed"
   | "judgementOffset"
@@ -94,6 +95,7 @@ export class TimelineViewport {
   scale = TIMELINE_SCALE_DEFAULT;
   division = 4;
   snapX = true;
+  snapY = true;
   gridCount = 11;
   originalPanelWidth = 0;
   exclusiveRatio = 0.75;
@@ -187,10 +189,27 @@ export class TimelineViewport {
     this.playbackOwnsOrigin = false;
   }
 
-  /** Drop geometry that belongs to the previous timeline presentation mode. */
+  /**
+   * Drop geometry that belongs to the previous timeline presentation mode.
+   *
+   * The per-area horizontal position survives: it is the user's view state, so
+   * closing multi-line editing or switching the visible field and returning
+   * must resume the same panels. Only the scrollbar's frame projection is
+   * cleared here; the next paint republishes it from the stored position.
+   */
   resetModeState(): void {
     this.originalPanelWidth = 0;
     this.columnGap = undefined;
+    this.multiLineScrollState.snapshot.set({ visible: false, max: "0", value: "0" });
+  }
+
+  /**
+   * Drop the multi-line horizontal position for a different document.
+   *
+   * The position belongs to one chart's editing session: switching the visible
+   * field keeps it, while a newly installed document starts at the left edge.
+   */
+  resetMultiLineScroll(): void {
     this.multiLineScroll = { notes: 0, events: 0 };
     this.multiLineScrollState.snapshot.set({ visible: false, max: "0", value: "0" });
   }
@@ -219,6 +238,7 @@ export class TimelineViewport {
       scale,
       division,
       snapX,
+      snapY,
       multiLineWindowWidth,
       scrollSpeed,
       judgementOffset,
@@ -230,6 +250,7 @@ export class TimelineViewport {
       scale: clampTimelineScale(scale),
       division,
       snapX,
+      snapY,
       multiLineWindowWidth: clampMultiLineWindowWidth(multiLineWindowWidth),
       scrollSpeed,
       judgementOffset,
@@ -247,9 +268,9 @@ export class TimelineViewport {
   panelLayout(area: TimelineArea): TimelinePanelLayout {
     const session = this.getSession();
     const count = this.panelCount(area);
-    // Event windows separate at one eighth of a window; note panels keep their
-    // narrower surface gap. Both values still come from this layout.
-    const gapRatio = area === "events" ? 1 / 8 : 0.04;
+    // Note and event windows share one surface gap so their panel widths stay
+    // identical when the same multi-line selection is shown in either mode.
+    const gapRatio = 0.04;
     return {
       active: session.multiLineActive,
       count,

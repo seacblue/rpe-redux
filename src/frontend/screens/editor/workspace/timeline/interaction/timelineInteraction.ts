@@ -20,16 +20,18 @@ export function autoScroll(this: TimelineGestureReceiver, elapsed: number): void
   if (!drag || !["move", "startTime", "endTime"].includes(drag.kind)) {
     return;
   }
-  const delta = dragScrollDelta(
-    drag.current.y,
-    this.viewport.viewHeight(),
-    this.viewport.scale,
-    elapsed,
-  );
+  const height = this.viewport.viewHeight();
+  // T/U can temporarily hide both authoring canvases while the pointer drag
+  // remains active. There is no meaningful edge to scroll in that layout.
+  if (!Number.isFinite(height) || height <= 0) {
+    return;
+  }
+  const delta = dragScrollDelta(drag.current.y, height, this.viewport.scale, elapsed);
   if (!delta) {
     return;
   }
   drag.scrolled = true;
+  drag.scrollSeconds = (drag.scrollSeconds ?? 0) + delta;
   this.gestures.onDragScroll?.(delta);
   this.changed();
 }

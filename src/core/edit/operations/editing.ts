@@ -9,7 +9,7 @@
 import { t, tRaw } from "../../../i18n/index.ts";
 import type { HistoryBeatRange } from "../session/history.ts";
 import type { EditorSession } from "../session/session.ts";
-import { selectiveUndoLatest, type SelectiveUndoResult } from "../session/selectiveUndo.ts";
+import { selectiveUndoLatest } from "../session/selectiveUndo.ts";
 import { createLateBound } from "../../utils/lateBound.ts";
 
 export interface HistoryTravelOptions {
@@ -18,31 +18,6 @@ export interface HistoryTravelOptions {
   notify(message: string, level?: string, duration?: number): void;
   /** Reveal the edited beat span after a successful undo or redo. */
   jumpToEdit?(range: HistoryBeatRange): void;
-}
-
-/** Reports the outcome of a collaborative undo without claiming unapplied work. */
-function notifyCollaborativeUndo(
-  result: SelectiveUndoResult,
-  notify: HistoryTravelOptions["notify"],
-): void {
-  if (result.status === "committed") {
-    notify(
-      t("editor.app.notice.undone", {
-        label: t("workspace.history.collaborativeUndo"),
-      }),
-      "success",
-    );
-    return;
-  }
-  if (result.status === "conflict") {
-    notify(t("workspace.history.undoConflict", { paths: result.paths.join(", ") }), "error");
-    return;
-  }
-  if (result.status === "rejected") {
-    notify(t("workspace.history.undoRejected"), "error");
-    return;
-  }
-  notify(t("workspace.history.undoUnavailable"), "warning");
 }
 
 /** Builds undo/redo actions that cancel placement and report the entry they travel to. */
@@ -69,7 +44,6 @@ export function createHistoryTravel({
         return;
       }
       const result = selectiveUndoLatest(session, t("workspace.history.collaborativeUndo"));
-      notifyCollaborativeUndo(result, notify);
       if (result.status === "committed") {
         reveal(session);
       }
@@ -79,24 +53,18 @@ export function createHistoryTravel({
       -1,
     );
     if (!entry) {
-      notify(
-        direction === "undo"
-          ? t("editor.app.notice.nothingToUndo")
-          : t("editor.app.notice.nothingToRedo"),
-        "warning",
-      );
+      if (direction === "redo") {
+        notify(t("editor.app.notice.nothingToRedo"), "warning");
+      }
       return;
     }
     if (!session.travel(direction)) {
       return;
     }
     reveal(session);
-    notify(
-      t(direction === "undo" ? "editor.app.notice.undone" : "editor.app.notice.redone", {
-        label: tRaw(entry.label),
-      }),
-      "success",
-    );
+    if (direction === "redo") {
+      notify(t("editor.app.notice.redone", { label: tRaw(entry.label) }), "success");
+    }
   }
   return { travel };
 }

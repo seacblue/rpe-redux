@@ -1,6 +1,6 @@
 # 数据持久化
 
-为扩展保存配置、草稿、版本标记和用户可配置项，并在升级时安全迁移旧数据。
+为扩展保存配置、草稿、版本标记和用户可配置项，并在升级时安全迁移旧数据。谱面侧的字段投影是另一条边界；不要把谱面字段放进包存储，请使用生成的 `persistence` API 页面。
 
 ## 用途
 
@@ -225,4 +225,4 @@ const handle = context.api.values.define({
 - [快速开始](getting-started.md)：最小包结构和 `activate`。
 - [设计系统](design-system.md)：设置页和面板使用的控件。
 - [能力与授权](capabilities.md)：`storage`、`settings`、`values` 的授权规则。
-- 左侧 **API** 树：`storage.*`、`settings.*`、`values.*` 的方法页；异步约定见[API 约定](api-reference.md)。
+- 左侧 **API** 树：`storage.*`、`settings.*`、`values.*` 的方法页；每个方法页都包含自己的权限、返回值和错误处理。

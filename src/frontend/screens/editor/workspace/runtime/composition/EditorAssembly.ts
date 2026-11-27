@@ -19,7 +19,6 @@ import { createPreviewRuntime } from "../providers/PreviewProvider.tsx";
 import { createTimelineRuntime } from "../providers/TimelineProvider.tsx";
 import { createInspectorRuntime } from "../providers/InspectorProvider.tsx";
 import { createDocumentRuntime } from "../providers/DocumentProvider.tsx";
-import { openAssets as openDocumentAssets } from "../../document/lifecycle/service.ts";
 import { appendAutomaticSnapshot } from "../../document/save/snapshots.ts";
 import type { EditorSurfaces } from "./editorSurfaces.ts";
 import type { Chart } from "../../../../../../core/global/chart/chart.ts";
@@ -119,7 +118,9 @@ import { getChartInfoExpanded } from "../../../../../chrome/statusbar/chartInfoP
 import { bindEditorInteractions } from "../bindings/editorBindings.ts";
 import { canvasShortcutTarget } from "../input/canvasShortcutTarget.ts";
 import type { CanvasShortcutTarget } from "../../../../../platform/shortcuts/canvasShortcuts.ts";
-import type { PrefixDigitSequenceSubmission } from "../../../../../../core/shortcuts/prefixDigitSequence.ts";
+import type { PrefixSequenceSubmission } from "../../../../../../core/shortcuts/prefixSequence.ts";
+import { shortcutKey } from "../../../../../../core/shortcuts/keyMatching.ts";
+import type { ShortcutEventLike } from "../../../../../../core/shortcuts/types.ts";
 import { bindEditorLanguageRefresh } from "../bindings/languageRefresh.ts";
 import {
   createHitTestPicker,
@@ -142,6 +143,24 @@ import {
   markBootSettled,
   resetBootSettled,
 } from "../../../../../contracts/appRoute.ts";
+
+/** Read either physical digit block as the token used by line jump. */
+function lineJumpDigitToken(event: ShortcutEventLike): string | null {
+  const key = shortcutKey(event);
+  return /^(?:DIGIT|NUMPAD)[0-9]$/.test(key) ? key : null;
+}
+
+/** Decode a collected physical digit sequence into a zero-based line index. */
+function decodeLineJumpTokens(
+  tokens: readonly string[],
+): { kind: "number"; value: number } | { kind: "invalid" } {
+  if (!tokens.length || tokens.some((token) => !/^(?:DIGIT|NUMPAD)[0-9]$/.test(token))) {
+    return { kind: "invalid" };
+  }
+  const value = Number(tokens.map((token) => token.slice(-1)).join(""));
+  return Number.isSafeInteger(value) ? { kind: "number", value } : { kind: "invalid" };
+}
+
 registerEditorShortcuts();
 
 /** Builds the editor's services, bindings, and providers for one mounted session. */
@@ -369,6 +388,9 @@ export function createEditorAssembly(
     activatePane("");
   }
   const editClock = new EditorEditClock();
+  scope.listen(window, "blur", () => editClock.pause());
+  scope.listen(window, "focus", () => editClock.pause());
+  scope.listen(document, "visibilitychange", () => editClock.pause());
   const offsetSeconds = () => Number(session.current.chart.META.offset ?? 0) / 1000;
   /**
    * How far ahead of the audible position the picture is drawn.
@@ -388,9 +410,6 @@ export function createEditorAssembly(
     ui,
     invalidate,
     notify,
-    openAssets: () => {
-      void openDocumentAssets();
-    },
     atHome,
     offsetSeconds,
     tempo: tempo.get,
@@ -699,6 +718,34 @@ export function createEditorAssembly(
     // value would jump instead of following the hand.
     return zoomAnimator.request(timelineZoomFactor(delta));
   };
+  const scrollMultiLineHorizontally = (event: WheelEvent, direction: -1 | 1): boolean => {
+    const target = event.target;
+    const sessionState = session.current;
+    const area =
+      target === timeline.notesCanvas
+        ? "notes"
+        : target === timeline.eventsCanvas
+          ? "events"
+          : null;
+    const activeArea = sessionState.multiLineMode === "events" ? "events" : "notes";
+    if (!area || area !== activeArea || !sessionState.multiLineActive) {
+      return false;
+    }
+    const canvas = area === "notes" ? timeline.notesCanvas : timeline.eventsCanvas;
+    if (timeline.viewport.panelCount(area) <= 1 || !event.deltaY || canvas.clientWidth <= 0) {
+      return false;
+    }
+    const unit = event.deltaMode === 1 ? 40 : event.deltaMode === 2 ? canvas.clientHeight : 1;
+    const distance = Math.abs(event.deltaY) * unit;
+    if (!distance) {
+      return false;
+    }
+    // `panMultiLine` consumes a pointer-style delta, so its positive value
+    // moves the content left. The binding direction is the requested viewport
+    // direction and remains stable if the user rebinds the wheel tokens.
+    timeline.viewport.panMultiLine(canvas.clientWidth, -direction * distance, area);
+    return true;
+  };
   const timelineNavigation = bindTimelineNavigation({
     timeline,
     session: () => session.current,
@@ -709,6 +756,7 @@ export function createEditorAssembly(
     }),
     lineSwitcher,
     zoomVertical: zoomTimelineVertically,
+    multiLineScroll: scrollMultiLineHorizontally,
   });
   // The preview and overview are under the timeline's stage, while progress is
   // a separate toolbar surface. Keep one wheel command so all three surfaces
@@ -775,7 +823,7 @@ export function createEditorAssembly(
     return true;
   }
   /** Resolves a passive line-jump submission through the overview selection path. */
-  function handleLineJump(submission: PrefixDigitSequenceSubmission): void {
+  function handleLineJump(submission: PrefixSequenceSubmission): void {
     if (submission.kind === "invalid") {
       notify({
         message: t("editor.app.notice.lineJumpInvalid"),
@@ -788,7 +836,17 @@ export function createEditorAssembly(
     if (submission.kind === "empty") {
       return;
     }
-    const index = submission.value;
+    const decoded = decodeLineJumpTokens(submission.tokens);
+    if (decoded.kind === "invalid") {
+      notify({
+        message: t("editor.app.notice.lineJumpInvalid"),
+        level: "warning",
+        duration: 4000,
+        key: "editor.lineJump",
+      });
+      return;
+    }
+    const index = decoded.value;
     if (selectOverviewLine(index)) {
       return;
     }
@@ -989,6 +1047,7 @@ export function createEditorAssembly(
       reportError,
       notify,
       nudgeBeatInput,
+      hitSoundOptions: inspectorRuntime.hitSoundOptions,
     },
     selection: {
       layer: () => timeline.gestures.layer,
@@ -1096,7 +1155,7 @@ export function createEditorAssembly(
         closePane();
       }
     },
-    resetEditClock: () => editClock.reset(),
+    resetEditClock: (initialSeconds = 0) => editClock.setBaseline(initialSeconds),
     currentEditSeconds: () => editClock.seconds,
     setHasDocument,
     hasDocument,
@@ -1184,6 +1243,7 @@ export function createEditorAssembly(
       reportError,
       notify,
       lineJump: handleLineJump,
+      lineJumpToken: lineJumpDigitToken,
       cancelTimelineZoom: () => zoomAnimator.cancel(),
     },
     timeline: {
@@ -1241,6 +1301,7 @@ export function createEditorAssembly(
       atHome,
       hasDocument,
       documentHidden: () => document.hidden,
+      windowFocused: () => document.hasFocus(),
     },
     clock: {
       audio,
@@ -1308,6 +1369,7 @@ export function createEditorAssembly(
     getTempo: tempo.get,
     reportError,
     onNudge: nudgeBeatInput,
+    hitSoundOptions: inspectorRuntime.hitSoundOptions,
   });
 
   timeline.gestures.eventPlacementType = timeline.eventTypes[0];

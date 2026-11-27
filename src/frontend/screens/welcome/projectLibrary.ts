@@ -22,6 +22,11 @@ function dropPathKey(value: string): string {
   return value.trim().replaceAll("\\", "/").replace(/\/+/g, "/").toLowerCase();
 }
 
+/** True when a classified RPE chart already names a file the native opener owns. */
+function isNativeChartFile(path: string): boolean {
+  return /\.(?:json|pez|zip)$/i.test(path);
+}
+
 /** Host callbacks the home library needs to open, import, export, and report. */
 interface ProjectHomeOptions {
   /** Open a project stored in the local SQLite library; false when cancelled. */
@@ -289,6 +294,13 @@ export class ProjectHome {
         return ids;
       }
       case "chart-rpe": {
+        // Archives and loose JSON files do not need the folder migration probe.
+        // Starting that probe first made desktop PEZ imports wait on a native
+        // folder scan before the visible import task could be created.
+        if (isNativeChartFile(route.path)) {
+          const id = await this.importFile(route.entry);
+          return id ? [id] : [];
+        }
         const ids = this.importRpePath ? await this.importRpePath(route.path) : null;
         if (ids !== null) {
           return ids;

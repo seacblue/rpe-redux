@@ -1,8 +1,10 @@
 /** Answers which notes the field shows and which one the pointer is over. */
 import {
   hitTimelineNote,
+  holdPartAt,
   timelineNoteCandidates,
 } from "../../../../../../core/edit/timeline/hitTest.ts";
+import type { HoldPart } from "../../../../../../core/edit/timeline/hitTest.ts";
 import type {
   TimelineNoteEntry,
   TimelinePoint,
@@ -32,18 +34,34 @@ export function visible(
   return this.cache.visibleNotes(lineIndex, bottom, top);
 }
 
+/**
+ * The judge lines one pointer position can hit.
+ *
+ * A merged note field paints every selected line in one panel, so the pointer
+ * there belongs to all of them; a split field owns one line per panel, and the
+ * panel under the pointer is the only one it can reach.
+ */
+function hitLineIndices(
+  this: TimelineNoteHitTestReceiver,
+  position: TimelinePoint,
+): readonly number[] {
+  const session = this.getSession();
+  if (
+    session.multiLineActive &&
+    session.multiLineMode === "notes" &&
+    this.viewport.panelCount("notes") === 1
+  ) {
+    return session.targetLineIndices;
+  }
+  return [this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")];
+}
+
 /** Notes under `position` across every panel a merged note view can hit. */
 function candidates(
   this: TimelineNoteHitTestReceiver,
   position: TimelinePoint,
 ): TimelineNoteEntry[] {
-  const session = this.getSession();
-  const lineIndices =
-    session.multiLineActive &&
-    session.multiLineMode === "notes" &&
-    this.viewport.panelCount("notes") === 1
-      ? session.targetLineIndices
-      : [this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")];
+  const lineIndices = hitLineIndices.call(this, position);
   const entries = lineIndices.flatMap((lineIndex) => this.visible(lineIndex));
   const rotations = noteRotations.call(this, lineIndices);
   return timelineNoteCandidates(
@@ -105,12 +123,12 @@ export function hit(
   this: TimelineNoteHitTestReceiver,
   position: TimelinePoint,
 ): TimelineNoteEntry | undefined {
-  const lineIndex = this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes");
+  const lineIndices = hitLineIndices.call(this, position);
   const visibleStarted = pointerTimingStart();
-  const entries = this.visible(lineIndex);
+  const entries = lineIndices.flatMap((lineIndex) => this.visible(lineIndex));
   pointerTimingEnd(visibleStarted, "hitVisibleQuery");
   const overlapStarted = pointerTimingStart();
-  const rotations = noteRotations.call(this, [lineIndex]);
+  const rotations = noteRotations.call(this, lineIndices);
   pointerTimingEnd(overlapStarted, "hitOverlapRanks");
   return hitTimelineNote(entries, position, {
     horizontal: (note, lineIndex) => this.viewport.noteHorizontal(note.positionX, lineIndex),
@@ -125,6 +143,33 @@ export function hit(
     vertical: (beat, lineIndex) => this.viewport.noteVerticalForLine(beat, lineIndex),
     rotation: (index, lineIndex) => noteOverlapRotation(rotations.get(lineIndex)?.get(index)),
   });
+}
+
+/** Resolve the visible Hold cap or body under a note-field pointer. */
+export function holdPart(
+  this: TimelineNoteHitTestReceiver,
+  entry: TimelineNoteEntry,
+  position: TimelinePoint,
+): HoldPart | null {
+  if (entry.item.type !== 2) {
+    return null;
+  }
+  const width = this.viewport.noteWidth(entry.item);
+  const skin = this.appearance.skin;
+  const head = skin?.holdHeadTexture(false);
+  const tail = skin?.holdEndTexture(false);
+  const headLength =
+    head && head.bounds.width > 0 ? width * (head.bounds.height / head.bounds.width) : 8;
+  const tailLength =
+    tail && tail.bounds.width > 0 ? width * (tail.bounds.height / tail.bounds.width) : 8;
+  return holdPartAt(
+    entry.item,
+    this.viewport.noteVerticalForLine(entry.start, entry.lineIndex),
+    this.viewport.noteVerticalForLine(entry.end, entry.lineIndex),
+    position.y,
+    headLength,
+    tailLength,
+  );
 }
 
 /** Every note under `position`, used for the overlap picker. */

@@ -7,6 +7,7 @@
  */
 import type {
   ChartObjectId,
+  Beat,
   ChartReadAllOptions,
   ChartReadCollection,
   ChartReadItem,
@@ -159,6 +160,15 @@ async function readAllNotes(): Promise<void> {
   }
 }
 
+/** Exact chart arithmetic is published through the asynchronous chart facade. */
+async function addBeats(): Promise<void> {
+  const result = await api.chart.beats.addFraction([2, 0, 1], 1, 2);
+  if (result.ok) {
+    const beat: Beat = result.value;
+    void beat;
+  }
+}
+
 /** The timing collection exposes the tempo map accepted by the transaction handle. */
 async function readAllTiming(): Promise<void> {
   const result = await api.chart.readAll("timing");
@@ -296,6 +306,7 @@ async function subscribePlayback(): Promise<void> {
 declare const surface: PublishedSurface | null;
 void surface;
 void readAllNotes;
+void addBeats;
 void readAllTiming;
 void deleteLine;
 void readAllRevisions;

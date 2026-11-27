@@ -12,6 +12,10 @@
   align-items: center;
   gap: var(--space-1-5);
   flex: none;
+
+  &:has(> .toolbar-field-icon-button) {
+    gap: var(--space-1);
+  }
 }
 
 .editor-grid label {

@@ -6,6 +6,49 @@
 
 import type { TimelineNote, TimelineNoteEntry, TimelinePoint } from "./types.ts";
 
+/** The independently draggable regions of a Hold in the note timeline. */
+export type HoldPart = "head" | "body" | "tail";
+
+/**
+ * Resolve the painted Hold region beneath a vertical pointer position.
+ *
+ * Hold caps extend inward from their anchors along the head-to-tail span, so
+ * their actual texture lengths—not a fixed tolerance—define the edge zones.
+ * A point outside the span returns null even when a caller used a padded hit
+ * rectangle to find the note.
+ */
+export function holdPartAt(
+  note: Pick<TimelineNote, "type">,
+  startY: number,
+  endY: number,
+  pointY: number,
+  headLength: number,
+  tailLength: number,
+): HoldPart | null {
+  if (note.type !== 2) {
+    return null;
+  }
+  const span = Math.abs(endY - startY);
+  const direction = Math.sign(endY - startY) || 1;
+  const fromHead = (pointY - startY) * direction;
+  const fromTail = (endY - pointY) * direction;
+  if (fromHead < 0 || fromHead > span) {
+    return null;
+  }
+  const headHit = fromHead <= Math.max(0, headLength);
+  const tailHit = fromTail <= Math.max(0, tailLength);
+  if (headHit && tailHit) {
+    return fromHead <= fromTail ? "head" : "tail";
+  }
+  if (headHit) {
+    return "head";
+  }
+  if (tailHit) {
+    return "tail";
+  }
+  return "body";
+}
+
 export interface NoteHitGeometry {
   horizontal(note: TimelineNote, lineIndex: number): number;
   width(note: TimelineNote): number;

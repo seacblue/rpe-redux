@@ -1,6 +1,6 @@
 /**
  * The ordered line-selection token model: authored order, in-place subtraction,
- * block appends, folder membership, and formatter round-trips.
+ * ordered block additions, folder membership, and formatter round-trips.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -81,16 +81,25 @@ test("subtracting one value from a step range keeps the step on both sides", () 
   ]);
 });
 
-test("a block append removes internal overlap, then lands at the end", () => {
+test("a block append removes internal overlap, then stays in line order", () => {
   assert.deepEqual(addLineSelection([range(0, 3)], [2, 3, 4, 5], LINES), [
     range(0, 1),
     range(2, 5),
   ]);
   assert.deepEqual(addLineSelection([line(5), line(1), line(3)], [9], LINES), [
-    line(5),
     line(1),
     line(3),
+    line(5),
     line(9),
+  ]);
+  assert.deepEqual(addLineSelection([range(8, 18)], [12, 13, 14, 15, 16], LINES), [
+    range(8, 11),
+    range(12, 16),
+    range(17, 18),
+  ]);
+  assert.deepEqual(addLineSelection([range(8, 18)], [16, 17, 18, 19, 20, 21], LINES), [
+    range(8, 15),
+    range(16, 21),
   ]);
 });
 

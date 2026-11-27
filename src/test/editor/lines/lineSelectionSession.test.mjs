@@ -81,7 +81,7 @@ test("a folder token stays authored and persists as its members", () => {
   assert.deepEqual(reopened.multiLineRestore, [3, 4, 5]);
 });
 
-test("adding a line appends it and removing one splices its token", () => {
+test("adding a line keeps selection order and removing one splices its token", () => {
   const session = new EditorSession(chartWithLines());
   session.setMultiLineSelection([0, 5], {
     persist: false,
@@ -92,11 +92,11 @@ test("adding a line appends it and removing one splices its token", () => {
   });
 
   session.addMultiLine(3);
-  assert.deepEqual(session.multiLineIndices, [0, 5, 3]);
+  assert.deepEqual(session.multiLineIndices, [0, 3, 5]);
   assert.deepEqual(session.multiLineTokens, [
     { kind: "line", line: 0 },
-    { kind: "line", line: 5 },
     { kind: "line", line: 3 },
+    { kind: "line", line: 5 },
   ]);
 
   session.setMultiLineSelection([0, 1, 2, 3, 4], {

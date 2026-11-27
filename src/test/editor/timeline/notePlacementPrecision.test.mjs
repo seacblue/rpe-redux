@@ -76,6 +76,7 @@ test("dragging a twelfth-grid note to a quarter beat lands on 1/4, not 7499/3000
       inset: 0,
       gridCount: 11,
       snapX: true,
+      snapY: true,
       factor: 1,
     },
   );

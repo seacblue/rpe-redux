@@ -17,6 +17,22 @@ export interface TimelinePoint {
   y: number;
 }
 
+/** Geometry captured when a pointer drag starts and held until that drag ends. */
+export interface TimelineDragGeometry {
+  /** The canvas's document-space left edge at drag start. */
+  left: number;
+  /** The canvas's document-space top edge at drag start. */
+  top: number;
+  /** The canvas width used for multi-line panel calculations at drag start. */
+  width: number;
+  /** The note panel width used for horizontal drag deltas at drag start. */
+  panelWidth: number;
+  /** The time scale used for vertical drag deltas at drag start. */
+  scale: number;
+  /** The projected timeline height used for edge-time calculations at drag start. */
+  viewHeight: number;
+}
+
 export type TimelineNote = JudgeLineNote & {
   positionX: number;
   tint?: number[];
@@ -74,7 +90,11 @@ interface DragCommon {
   pointerId?: number;
   start: TimelinePoint;
   current: TimelinePoint;
+  /** Layout geometry frozen for pointer drags that must survive a relayout. */
+  geometry?: TimelineDragGeometry;
   scrolled?: boolean;
+  /** Accumulated seconds moved by timeline edge auto-scroll during this drag. */
+  scrollSeconds?: number;
   finished?: boolean;
   currentWorldX?: number;
   startWorldX?: number;

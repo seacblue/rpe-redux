@@ -59,7 +59,25 @@ export function lineGuides(
 }
 
 type GuideGrid = Map<number, Map<number, Map<number, number[]>>>;
-const guideGroupPools = new WeakMap<LineGuideGroup[], LineGuideGroup[]>();
+
+/** The distance at which two line-number guides first become one label. */
+const GUIDE_MERGE_RADIUS = 10;
+
+/** Extra distance retained for a pair that was already merged last frame. */
+const GUIDE_MERGE_DISTANCE_HYSTERESIS = 2;
+
+/** The maximum authored angle difference for a shared line-number label. */
+const GUIDE_MERGE_ROTATION = 0.01;
+
+/** Extra angle retained for a pair that was already merged last frame. */
+const GUIDE_MERGE_ROTATION_HYSTERESIS = 0.002;
+
+interface GuideGroupStorage {
+  readonly pool: LineGuideGroup[];
+  readonly previousGroupByIndex: Map<number, number>;
+}
+
+const guideGroupStorage = new WeakMap<LineGuideGroup[], GuideGroupStorage>();
 
 /** Insert one finite guide group into the validation grid. */
 function insertGuideGroup(
@@ -114,14 +132,32 @@ export function mergeGuidesInto(
   enabled: boolean,
   groups: LineGuideGroup[],
 ): LineGuideGroup[] {
-  const pool = guideGroupPools.get(groups) ?? [];
+  const storage =
+    guideGroupStorage.get(groups) ??
+    (() => {
+      const created: GuideGroupStorage = {
+        pool: [],
+        previousGroupByIndex: new Map(),
+      };
+      guideGroupStorage.set(groups, created);
+      return created;
+    })();
+  const { pool, previousGroupByIndex } = storage;
+  if (previousGroupByIndex.size === 0 && groups.length > 0) {
+    groups.forEach((group, groupIndex) => {
+      group.indices.forEach((index) => previousGroupByIndex.set(index, groupIndex));
+    });
+  }
   for (const group of groups) {
     group.indices.length = 0;
     pool.push(group);
   }
   groups.length = 0;
-  const radius = 10 * scale;
+  const radius = GUIDE_MERGE_RADIUS * scale;
   const radiusSquared = radius * radius;
+  const stableRadius = (GUIDE_MERGE_RADIUS + GUIDE_MERGE_DISTANCE_HYSTERESIS) * scale;
+  const stableRadiusSquared = stableRadius * stableRadius;
+  const stableRotation = GUIDE_MERGE_ROTATION + GUIDE_MERGE_ROTATION_HYSTERESIS;
   const indexable = enabled && guides.length >= 64 && Number.isFinite(radius) && radius > 0;
   let grid: GuideGrid | null = null;
   for (const guide of guides) {
@@ -152,27 +188,36 @@ export function mergeGuidesInto(
       const y = Math.floor(guide.y / radius);
       const rotation = Math.floor(guide.rotation / 0.01);
       let first = Number.POSITIVE_INFINITY;
-      for (let dx = -1; dx <= 1; dx++) {
+      // The indexed search covers the hysteresis band as well as the ordinary
+      // merge radius. Validation below still uses the tighter threshold for a
+      // pair that was not grouped on the preceding frame.
+      for (let dx = -2; dx <= 2; dx++) {
         const column = grid.get(x + dx);
         if (!column) {
           continue;
         }
-        for (let dy = -1; dy <= 1; dy++) {
+        for (let dy = -2; dy <= 2; dy++) {
           const cell = column.get(y + dy);
           if (!cell) {
             continue;
           }
-          for (let dr = -1; dr <= 1; dr++) {
+          for (let dr = -2; dr <= 2; dr++) {
             const bucket = cell.get(rotation + dr);
             if (!bucket) {
               continue;
             }
             for (const index of bucket) {
               const candidate = groups[index];
+              const wasMerged =
+                previousGroupByIndex.get(guide.index) !== undefined &&
+                previousGroupByIndex.get(guide.index) ===
+                  previousGroupByIndex.get(candidate.indices[0]);
+              const allowedRadiusSquared = wasMerged ? stableRadiusSquared : radiusSquared;
               if (
                 index < first &&
-                Math.abs(candidate.rotation - guide.rotation) < 0.01 &&
-                (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 < radiusSquared
+                Math.abs(candidate.rotation - guide.rotation) <
+                  (wasMerged ? stableRotation : GUIDE_MERGE_ROTATION) &&
+                (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 < allowedRadiusSquared
               ) {
                 group = candidate;
                 first = index;
@@ -182,11 +227,17 @@ export function mergeGuidesInto(
         }
       }
     } else if (enabled) {
-      group = groups.find(
-        (candidate) =>
-          (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 < radiusSquared &&
-          Math.abs(candidate.rotation - guide.rotation) < 0.01,
-      );
+      group = groups.find((candidate) => {
+        const wasMerged =
+          previousGroupByIndex.get(guide.index) !== undefined &&
+          previousGroupByIndex.get(guide.index) === previousGroupByIndex.get(candidate.indices[0]);
+        return (
+          (candidate.x - guide.x) ** 2 + (candidate.y - guide.y) ** 2 <
+            (wasMerged ? stableRadiusSquared : radiusSquared) &&
+          Math.abs(candidate.rotation - guide.rotation) <
+            (wasMerged ? stableRotation : GUIDE_MERGE_ROTATION)
+        );
+      });
     }
     if (group) {
       group.indices.push(guide.index);
@@ -203,7 +254,10 @@ export function mergeGuidesInto(
       }
     }
   }
-  guideGroupPools.set(groups, pool);
+  previousGroupByIndex.clear();
+  groups.forEach((group, groupIndex) => {
+    group.indices.forEach((index) => previousGroupByIndex.set(index, groupIndex));
+  });
   return groups;
 }
 

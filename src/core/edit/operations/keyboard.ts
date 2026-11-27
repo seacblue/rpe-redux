@@ -51,6 +51,8 @@ interface KeyboardTimeline {
   gridCount: number;
   eventTypes: string[];
   eventInteraction: Pick<EventKeyboardTarget, "pending">;
+  /** Picks the note under the live timeline cursor for quick curve generation. */
+  quickPickAtCursor(): boolean;
   addAtCursor(type: number): boolean;
   cancelPlacement(): void;
 }
@@ -171,7 +173,9 @@ export interface EditorKeyboardActionDependencies {
   stopPlaybackStay: () => void;
   /** Seek to the start and play from there. */
   replayPlayback: () => Promise<unknown>;
-  /** Toggle time snapping for placing and dragging objects. */
+  /** Toggle horizontal note-position snapping. */
+  toggleNoteSnap: () => void;
+  /** Toggle vertical beat-time snapping for placing and dragging objects. */
   toggleTimeSnap: () => void;
   showLineInfo: () => void;
   /** Opens the workspace sampler for the single selected event's anchor. */
@@ -226,6 +230,7 @@ export async function runEditorKeyboardAction(
         "note.place.tap",
         "workspace.multiLine.toggle",
         "workspace.multiLine.switchMode",
+        "editor.curve.quickPick",
       ].includes(action)
     ) {
       recordDiagnosticAction(action, "shortcut", "ignored", surface);
@@ -340,6 +345,8 @@ export async function runEditorKeyboardAction(
       event.preventDefault();
       await deps.replayPlayback();
     } else if (action === "timeline.toggleSnapX") {
+      deps.toggleNoteSnap();
+    } else if (action === "timeline.toggleSnapY") {
       deps.toggleTimeSnap();
     } else if (action === "view.showLineInfo") {
       deps.showLineInfo();
@@ -396,6 +403,8 @@ export async function runEditorKeyboardAction(
       handled = timeline.addAtCursor(NOTE_TYPE_BY_ACTION[action]);
     } else if (action === "editor.curve.delete") {
       deps.deleteCurveSelection();
+    } else if (action === "editor.curve.quickPick") {
+      handled = timeline.quickPickAtCursor();
     } else if (action === "edit.delete") {
       deps.deleteSelection();
     } else if (action === "navigation.line.previous" || action === "navigation.line.next") {

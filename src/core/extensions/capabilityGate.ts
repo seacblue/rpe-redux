@@ -15,6 +15,9 @@ import { subscribePlaybackForOwner } from "../api/playback.ts";
 import type { PublicValueDefinition } from "../api/values.ts";
 import { createSettingsApi } from "../api/settings.ts";
 import { createHelpApi } from "../api/help.ts";
+import { createPersistenceApi } from "../api/persistence.ts";
+import { createShaderApi } from "../api/shader.ts";
+import { createNoteFieldsApi } from "../api/noteFields.ts";
 import { editorProjectId } from "../edit/state/publishedValues.ts";
 import { values as valueRegistry } from "../state/values.ts";
 import {
@@ -1137,6 +1140,9 @@ export function gateExtensionApi(
   allow("preview", "preview.read", api.preview);
   allow("theme", "styles", themeView(api, granted, owner, options));
   allow("help", "ui.guide", owner ? createHelpApi(owner) : api.help);
+  allow("persistence", "chart.persistence", owner ? createPersistenceApi(owner) : api.persistence);
+  allow("shader", "workspace.shader", owner ? createShaderApi(owner) : api.shader);
+  allow("noteFields", "chart.note-fields", owner ? createNoteFieldsApi(owner) : api.noteFields);
   // Workspace drawer navigation and Extension management stay host-only: they
   // are omitted from the package facade rather than exposed as denied getters.
 

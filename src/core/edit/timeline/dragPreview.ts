@@ -10,12 +10,15 @@ import {
   compareBeats,
   normalizeBeat,
   subtractBeats,
+  toBeat,
   type Beat,
 } from "../../global/chart/timing/beat.ts";
 import { snapTime, verticalGrid, type TempoGrid } from "../../global/chart/editing/editGrid.ts";
 import { checkedNotes } from "./model.ts";
 import { NOTE_X_MAX, NOTE_X_MIN, NOTE_X_SPAN } from "./timelineCoordinates.ts";
 import type { EditorSession } from "../session/session.ts";
+import { editCapturedSelection } from "../selection/edits.ts";
+import { captureSelection } from "../selection/snapshot.ts";
 import type { TimelineDrag, TimelineEventDrag, TimelineNote } from "./types.ts";
 
 /** Zero as a beat: the identity `subtractBeats`/`addBeats` compare against. */
@@ -31,6 +34,7 @@ export interface NoteMotionContext {
   readonly inset: number;
   readonly gridCount: number;
   readonly snapX: boolean;
+  readonly snapY: boolean;
   /** The visible panel's factor; merged multi-line notes share the active line. */
   readonly factor: number;
 }
@@ -66,9 +70,9 @@ export function moveTimelineNote(
   if (!anchor || !Number.isFinite(anchor.positionX)) {
     return note;
   }
-  const { tempo, origin, division, scale } = context;
+  const { tempo, division, scale } = context;
   const key = drag.kind === "endTime" ? "endTime" : "startTime";
-  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
+  const scroll = drag.scrollSeconds ?? 0;
   // The Z prekey can start a Hold edge drag anywhere inside the bar. For an
   // edge drag the pointer row, not the pointer's travel distance, is the time
   // the moved edge must land on.
@@ -78,7 +82,20 @@ export function moveTimelineNote(
       : tempo.seconds(anchor[key]) + (drag.start.y - drag.current.y) / scale + scroll;
   // Snap once, then move the triple exactly: the delta is a rational difference
   // of two beats, not a float that gets re-rounded on the way into the chart.
-  const deltaBeat = subtractBeats(snapTime(seconds, division, tempo), anchor[key]);
+  const targetBeat = context.snapY
+    ? snapTime(seconds, division, tempo)
+    : toBeat(tempo.beat(seconds));
+  const deltaBeat = subtractBeats(targetBeat, anchor[key]);
+  const rawDeltaX =
+    ((drag.current.x - drag.start.x) / Math.max(1, context.panelWidth - context.inset * 2)) *
+    NOTE_X_SPAN;
+  const spacing = verticalGrid(context.gridCount).spacing;
+  // X snapping is a relative movement grid. Keeping the original offset means
+  // a dragged note does not jump onto a lane just because snapping is enabled.
+  const deltaX =
+    context.snapX && Number.isFinite(spacing) && spacing > 0
+      ? Math.round(rawDeltaX / spacing) * spacing
+      : rawDeltaX;
   if (drag.kind !== "move") {
     if (note.type !== 2) {
       return note;
@@ -96,18 +113,12 @@ export function moveTimelineNote(
           : compareBeats(moved, note.endTime) > 0
             ? normalizeBeat(note.endTime)
             : moved;
-    return { ...note, [key]: bounded };
+    return {
+      ...note,
+      positionX: Math.max(NOTE_X_MIN, Math.min(NOTE_X_MAX, note.positionX + deltaX)),
+      [key]: bounded,
+    };
   }
-  const rawDeltaX =
-    ((drag.current.x - drag.start.x) / Math.max(1, context.panelWidth - context.inset * 2)) *
-    NOTE_X_SPAN;
-  const spacing = verticalGrid(context.gridCount).spacing;
-  // X snapping is a relative movement grid. Keeping the original offset means
-  // a dragged note does not jump onto a lane just because snapping is enabled.
-  const deltaX =
-    context.snapX && Number.isFinite(spacing) && spacing > 0
-      ? Math.round(rawDeltaX / spacing) * spacing
-      : rawDeltaX;
   // A note may be dragged up to beat zero, and no further.
   const mostNegative = subtractBeats(ZERO_BEAT, note.startTime);
   const boundedBeat = compareBeats(deltaBeat, mostNegative) < 0 ? mostNegative : deltaBeat;
@@ -119,19 +130,46 @@ export function moveTimelineNote(
   };
 }
 
+/** Build a transient chart for the selected notes while a timeline drag is active. */
+export function previewChartForNoteDrag(
+  session: EditorSession,
+  move: (note: TimelineNote) => TimelineNote,
+): EditorSession["chart"] | null {
+  const snapshot = captureSelection(session);
+  if (!snapshot.notes.length) {
+    return null;
+  }
+  const replacements = new Map<TimelineNote, TimelineNote>();
+  let changed = false;
+  for (const entry of snapshot.notes) {
+    const next = move(entry.note as TimelineNote);
+    replacements.set(entry.note as TimelineNote, next);
+    changed ||= next !== entry.note;
+  }
+  if (!changed) {
+    return null;
+  }
+  return editCapturedSelection(snapshot, {
+    note: (note) => replacements.get(note as TimelineNote) ?? (note as TimelineNote),
+  }).chart;
+}
+
 /** How many beats an event drag has moved, snapped to the division grid. */
 export function eventDragDelta(
   drag: TimelineEventDrag | null,
-  context: Pick<NoteMotionContext, "tempo" | "origin" | "scale" | "division">,
+  context: Pick<NoteMotionContext, "tempo" | "origin" | "scale" | "division" | "snapY">,
   factor: number,
 ): Beat {
   if (!drag || !("anchor" in drag) || !drag.anchor) {
     return ZERO_BEAT;
   }
-  const { tempo, origin, scale, division } = context;
-  const scroll = tempo.seconds(origin) - (drag.originSeconds ?? tempo.seconds(origin));
+  const { tempo, scale, division } = context;
+  const scroll = drag.scrollSeconds ?? 0;
   const seconds = tempo.seconds(drag.anchor) + (drag.start.y - drag.current.y) / scale + scroll;
-  return subtractBeats(snapTime(seconds, division, tempo), drag.anchor);
+  const targetBeat = context.snapY
+    ? snapTime(seconds, division, tempo)
+    : toBeat(tempo.beat(seconds));
+  return subtractBeats(targetBeat, drag.anchor);
 }
 
 /**
@@ -144,7 +182,7 @@ export function eventDragDelta(
  */
 export function eventEdgePointerDelta(
   drag: TimelineEventDrag | null,
-  context: Pick<NoteMotionContext, "tempo" | "origin" | "scale" | "division">,
+  context: Pick<NoteMotionContext, "tempo" | "origin" | "scale" | "division" | "snapY">,
   factor: number,
 ): Beat {
   if (
@@ -156,7 +194,10 @@ export function eventEdgePointerDelta(
   ) {
     return ZERO_BEAT;
   }
-  return subtractBeats(snapTime(drag.currentSeconds, context.division, context.tempo), drag.anchor);
+  const targetBeat = context.snapY
+    ? snapTime(drag.currentSeconds, context.division, context.tempo)
+    : toBeat(context.tempo.beat(drag.currentSeconds));
+  return subtractBeats(targetBeat, drag.anchor);
 }
 
 /** How far a drag that has left the panel should scroll it, per elapsed fraction. */

@@ -6,9 +6,10 @@
  * viewport receiver.
  */
 import * as coreGeometry from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
-import type { Beat } from "../../../../../../core/global/chart/timing/beat.ts";
+import { beatValue, toBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import {
   type TimelineArea,
+  type TimelineDragGeometry,
   type TimelineNote,
   type TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
@@ -26,8 +27,9 @@ export function point(
   this: TimelineViewportReceiver,
   event: PointerEvent,
   canvas: HTMLCanvasElement = this.notesCanvas,
+  geometry?: Pick<TimelineDragGeometry, "left" | "top">,
 ): TimelinePoint {
-  const rectangle = canvas.getBoundingClientRect();
+  const rectangle = geometry ?? canvas.getBoundingClientRect();
   return { x: event.clientX - rectangle.left, y: event.clientY - rectangle.top };
 }
 
@@ -243,21 +245,29 @@ export function visiblePanelRange(
   );
 }
 
-/** Clamped horizontal scroll offset for one area. */
+/**
+ * Clamped horizontal scroll offset for one area.
+ *
+ * The stored offset is the user's position and this read never rewrites it: the
+ * clamp follows the current panel count, so persisting the result would send the
+ * panels back to the left edge whenever the line selection shrinks or the field
+ * leaves multi-line presentation. A panel stride does not depend on the count,
+ * so a retained offset keeps the same panel at the left edge when the selection
+ * changes, and only an offset past the new content width is clamped.
+ */
 export function multiLineViewportOffset(
   this: TimelineViewportReceiver,
   width: number,
   area: TimelineArea = "notes",
 ): number {
-  const current =
-    typeof this.multiLineScroll === "number" ? this.multiLineScroll : this.multiLineScroll?.[area];
-  const value = coreGeometry.viewportOffset(width, this.panelLayout(area), Number(current) || 0);
+  const stored =
+    typeof this.multiLineScroll === "number"
+      ? { notes: this.multiLineScroll, events: this.multiLineScroll }
+      : this.multiLineScroll;
   if (typeof this.multiLineScroll === "number") {
-    this.multiLineScroll = { notes: value, events: value };
-  } else {
-    this.multiLineScroll[area] = value;
+    this.multiLineScroll = stored;
   }
-  return value;
+  return coreGeometry.viewportOffset(width, this.panelLayout(area), Number(stored[area]) || 0);
 }
 
 /** Move one multi-line area horizontally by a pointer delta and clamp its offset. */
@@ -273,6 +283,9 @@ export function panMultiLine(
   const current = this.multiLineViewportOffset(width, area);
   const next = coreGeometry.panViewportOffset(width, this.panelLayout(area), current, deltaX);
   this.multiLineScroll[area] = next;
+  // DOM panel chrome subscribes to this snapshot as well as the scrollbar. A
+  // pointer pan must publish the new offset immediately, before the next paint.
+  this.multiLineScrollState.snapshot.update({ value: String(next) });
   return next;
 }
 
@@ -333,24 +346,19 @@ export function beatAt(this: TimelineViewportReceiver, vertical: number): number
 
 /** Beat at a canvas y coordinate, snapped to the current division, as an exact triple. */
 export function snappedBeatTriple(this: TimelineViewportReceiver, vertical: number): Beat {
-  return coreGeometry.snappedBeatTriple(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(), scale: this.scaleForArea(this.getSession().multiLineMode) },
-    this.division,
-    this.tempo,
-  );
+  const height = this.viewHeight();
+  const scale = {
+    ...this.scaleConfig(),
+    scale: this.scaleForArea(this.getSession().multiLineMode),
+  };
+  return this.snapY
+    ? coreGeometry.snappedBeatTriple(vertical, height, scale, this.division, this.tempo)
+    : toBeat(coreGeometry.beatAt(vertical, height, scale, this.tempo));
 }
 
 /** Beat at a canvas y coordinate, snapped to the current division. */
 export function snappedBeat(this: TimelineViewportReceiver, vertical: number): number {
-  return coreGeometry.snappedBeat(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(), scale: this.scaleForArea(this.getSession().multiLineMode) },
-    this.division,
-    this.tempo,
-  );
+  return beatValue(this.snappedBeatTriple(vertical));
 }
 
 /** Canvas y coordinate for a beat in the active area. */
@@ -384,13 +392,11 @@ export function eventBeatAtTriple(
   type: string,
 ): Beat {
   const factor = this.factor;
-  return coreGeometry.snappedBeatTriple(
-    vertical,
-    this.viewHeight(),
-    { ...this.scaleConfig(factor), scale: this.scaleForArea("events") },
-    this.division,
-    this.tempo,
-  );
+  const height = this.viewHeight();
+  const scale = { ...this.scaleConfig(factor), scale: this.scaleForArea("events") };
+  return this.snapY
+    ? coreGeometry.snappedBeatTriple(vertical, height, scale, this.division, this.tempo)
+    : toBeat(coreGeometry.beatAt(vertical, height, scale, this.tempo));
 }
 
 /** Event beat at a canvas y coordinate, optionally snapped. */
@@ -401,7 +407,7 @@ export function eventBeatAt(
   snap: boolean = false,
 ): number {
   const factor = this.factor;
-  return snap
+  return snap && this.snapY
     ? coreGeometry.snappedBeat(
         vertical,
         this.viewHeight(),

@@ -10,6 +10,8 @@ import {
   registerDrawerPane,
 } from "../../../frontend/chrome/drawer/drawerPanes.ts";
 import {
+  bindInspectorState,
+  bindInspectorLifecycle,
   openInspector,
   openPane,
   registerInspectorPanel,
@@ -128,5 +130,31 @@ test("direct inspector activation also closes an open drawer", () => {
   } finally {
     disposePane();
     disposeDrawer();
+  }
+});
+
+test("a shell pane switch closes the bound inspector synchronously", () => {
+  const activePane = createValue({ initial: "test:pane-old" });
+  let closed = 0;
+  const oldPane = registerInspectorPanel({
+    id: "test:pane-old",
+    component: () => null,
+  });
+  const newPane = registerTestPane("test:pane-switch");
+  const disposeLifecycle = bindInspectorState(activePane);
+  const closeLifecycle = bindInspectorLifecycle("test:pane-old", {
+    onClose: () => {
+      closed += 1;
+    },
+  });
+  try {
+    assert.equal(openPane("test:pane-switch"), true);
+    assert.equal(activePane.get(), "test:pane-switch");
+    assert.equal(closed, 1);
+  } finally {
+    closeLifecycle();
+    disposeLifecycle();
+    newPane();
+    oldPane();
   }
 });

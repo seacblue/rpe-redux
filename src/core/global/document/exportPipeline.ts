@@ -8,7 +8,7 @@
  * confirmation before a lossy file is written.
  */
 import { type Chart } from "../chart/chart.ts";
-import { projectChartForExport } from "../chart/exportProjection.ts";
+import { projectChartForExportWithWarnings } from "../chart/exportProjection.ts";
 import { serializeOfficialChart } from "../chart/formats/official.ts";
 import { serializePecChart } from "../chart/formats/pec.ts";
 import { writeZip } from "../../utils/zip.ts";
@@ -42,9 +42,10 @@ export interface ExportModelAdapter<TModel> {
 /** The current editor chart adapter; kept as a seam for a future authoring model. */
 export const currentChartExportAdapter: ExportModelAdapter<Chart> = Object.freeze({
   convert(chart: Chart, context: ExportConversionContext) {
+    const projected = projectChartForExportWithWarnings(chart, context.chartName);
     return {
-      chart: projectChartForExport(chart, context.chartName),
-      warnings: [],
+      chart: projected.chart,
+      warnings: projected.warnings.map(({ code, message }) => ({ code, message })),
     };
   },
 });

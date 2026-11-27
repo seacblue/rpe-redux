@@ -65,6 +65,43 @@ test("shift-click toggles one line like the toolbar", () => {
   });
 });
 
+test("Ctrl-click toggles one line while Shift-click replaces the visible range", () => {
+  assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [1, 2, 3], 2, { ctrlKey: true })), {
+    current: 1,
+    selection: [1, 3],
+  });
+  assert.deepEqual(
+    clicked(
+      lineBarSelectionAfterClick(1, [1, 5], 3, { shiftKey: true }, undefined, [0, 1, 2, 3, 4, 5]),
+    ),
+    {
+      current: 3,
+      selection: [1, 2, 3],
+    },
+  );
+});
+
+test("Shift-click uses firstLine as the range origin and moves focus to the click", () => {
+  assert.deepEqual(
+    clicked(
+      lineBarSelectionAfterClick(
+        6,
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        8,
+        { shiftKey: true },
+        undefined,
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        [],
+        1,
+      ),
+    ),
+    {
+      current: 8,
+      selection: [1, 2, 3, 4, 5, 6, 7, 8],
+    },
+  );
+});
+
 test("clicking a selected line removes it and keeps a remaining member current", () => {
   assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [1, 2, 3], 2, true)), {
     current: 1,
@@ -83,10 +120,10 @@ test("the last selected line is protected", () => {
   });
 });
 
-test("shift-click appends a new line at the end", () => {
+test("shift-click keeps the resulting selection in line order", () => {
   assert.deepEqual(clicked(lineBarSelectionAfterClick(2, [0, 5], 4, true)), {
     current: 4,
-    selection: [0, 5, 4],
+    selection: [0, 4, 5],
   });
   assert.deepEqual(clicked(lineBarSelectionAfterClick(4, [1], 2, true)), {
     current: 2,

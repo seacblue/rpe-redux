@@ -13,7 +13,6 @@ import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx"
 import { ColorField } from "../../../../../design/components/input/ColorField.tsx";
 import { Input } from "../../../../../design/components/input/Input.tsx";
 import { Select } from "../../../../../design/components/select/Select.tsx";
-import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
 import { useEditorRuntimeValue } from "../../workspace/runtime/composition/EditorRuntime.tsx";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { useSetting } from "../../../settings/useSetting.ts";
@@ -81,6 +80,9 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             onCommit={(beat) => field.applyBeat?.(beat)}
             onNudge={field.nudge}
             accepts={field.accepts}
+            preservePartsOnBlur
+            commitOnEnter={false}
+            commitScope="notes"
             disabled={field.disabled}
             dataField={field.key}
             onFocusChange={
@@ -131,35 +133,6 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             disabled={field.disabled}
             data-inspector-field={field.key}
             onChange={(event) => field.apply?.({ value: event.currentTarget.checked ? "1" : "0" })}
-          />
-        }
-      />
-    );
-  }
-
-  if (field.kind === "slider") {
-    return (
-      <FieldRow
-        layout="inline"
-        density="compact"
-        htmlFor={`note-field-${field.key}`}
-        idPrefix={`note-field-${field.key}`}
-        label={field.label}
-        description={field.tipDescription}
-        control={
-          <SliderField
-            id={`note-field-${field.key}`}
-            min={Number(field.min ?? 0)}
-            max={Number(field.max ?? 255)}
-            step={field.step ?? 1}
-            value={field.value}
-            data-inspector-field={field.key}
-            disabled={field.disabled}
-            aria-describedby={
-              field.tipDescription ? `note-field-${field.key}-description` : undefined
-            }
-            aria-label={field.label}
-            onChange={(event) => field.apply?.(event.currentTarget)}
           />
         }
       />
@@ -230,13 +203,18 @@ function PropertyControlView({ field, liveValue }: ControlProps) {
             ref={input as Ref<HTMLSelectElement>}
             id={`note-field-${field.key}`}
             data-inspector-field={field.key}
+            data-select-tone={field.selectTone}
             defaultValue={field.value}
             onChange={(event) => field.apply?.(event.currentTarget)}
             onFocus={preservesDraft ? field.focus : undefined}
             onBlur={preservesDraft ? field.blur : undefined}
           >
             {field.options?.map(([value, label]) => (
-              <option value={value} key={value}>
+              <option
+                value={value}
+                key={value}
+                data-select-tone={value === field.value ? field.selectTone : undefined}
+              >
                 {label}
               </option>
             ))}

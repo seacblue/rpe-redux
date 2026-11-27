@@ -1,12 +1,4 @@
-/**
- * The multi-line pane: a line-selection expression, the line list, and the
- * multi-line window width, with the class owning the render cycle and its revision.
- *
- * Parsing and applying the expression belong to core multi-line edits; the view
- * only keeps drafts and writes the resulting indices onto the session. The list
- * selects on pointer down so a pending expression blur cannot swallow the click;
- * Shift-drag uses the toolbar marquee contract for range selection.
- */
+/** Multi-line pane with an expression field, line list, and timeline window. */
 import { flushSync } from "react-dom";
 import {
   useCallback,
@@ -25,9 +17,9 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { ListRow } from "../../../../../design/components/list/ListRow.tsx";
 import { Segmented } from "../../../../../design/components/segmented/Segmented.tsx";
 import { SliderField } from "../../../../../design/components/slider/SliderField.tsx";
-
 import type { EditorSession } from "../../../../../core/edit/session/session.ts";
 import type { Timeline } from "../../workspace/timeline/surface/timeline.ts";
+import { readTimelineNoteMarqueeColors } from "../../canvas/palette.ts";
 import { t } from "../../../../../i18n/index.ts";
 import {
   clampMultiLineWindowWidth,
@@ -68,33 +60,32 @@ import {
   listContentX,
   listContentY,
   marqueeBox,
+  resolveMarqueeFocusLine,
   type MarqueeBox,
   type MarqueeDrag,
   type MarqueePoint,
   type MarqueePreview,
 } from "../../toolbar/lineSelectionMarquee.ts";
-
+import {
+  createListSelectionState,
+  type ListSelectionModifiers,
+  type ListSelectionState,
+} from "../../../../../design/patterns/list/listSelection.ts";
 import type { MultiLinePanelState } from "./model.ts";
-
 type MultiLineTimeline = Pick<Timeline, "changed" | "cancelPlacement">;
-
 const MARQUEE_EDGE = 28;
 const MARQUEE_SCROLL_STEP = 14;
-
 interface MultiLinePanelOptions {
   state: MultiLinePanelState;
   render?: () => void;
   timeline?: MultiLineTimeline | null;
 }
-
 export interface MultiLinePanelProps {
   session: EditorSession;
   timeline: MultiLineTimeline | null;
   renderSession: () => void;
 }
-
 // This surface edits the existing mutable editor session and timeline models.
-
 /**
  * The editor engine owns the session and timeline. This view only renders the
  * stable multi-line panel structure and sends user actions back to that engine.
@@ -144,6 +135,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     return next;
   }, [currentLine, lineSelection]);
   const selectionRef = useRef(selectedSet);
+  const selectionStateRef = useRef<ListSelectionState<number> | null>(null);
   const lineListRef = useRef<HTMLDivElement | null>(null);
   const rowRefs = useRef(new Map<number, HTMLElement>());
   const marqueeCleanup = useRef<(() => void) | null>(null);
@@ -152,13 +144,11 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
   const marqueeStartContent = useRef<MarqueePoint>({ x: 0, y: 0 });
   const marqueeDrag = useRef<MarqueeDrag | null>(null);
   const marqueeFrame = useRef<number | null>(null);
+  const marqueeMoved = useRef(false);
   const suppressClick = useRef(false);
   const [marqueeRect, setMarqueeRect] = useState<MarqueeBox | null>(null);
   const [marqueePreview, setMarqueePreview] = useState<ReadonlySet<number> | null>(null);
   const [marqueeTouched, setMarqueeTouched] = useState<ReadonlySet<number> | null>(null);
-  useEffect(() => {
-    selectionRef.current = selectedSet;
-  }, [selectedSet]);
   const selectionPreferences = useLineSelectionPreferences();
   const collapsedGroups = useMemo(
     () => new Set(selectionPreferences.collapsedFolders),
@@ -190,6 +180,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     () => Array.from({ length: lines?.length ?? 0 }, (unused, index) => index),
     [lines],
   );
+  useEffect(() => {
+    selectionRef.current = selectedSet;
+    const state = selectionStateRef.current;
+    selectionStateRef.current = state
+      ? { ...state, selection: [...selectedSet] }
+      : createListSelectionState(available, [...selectedSet], currentLine);
+  }, [available, currentLine, selectedSet]);
   const authoredTokens = tokensForSelection(
     session.multiLineTokens,
     session.multiLineIndices,
@@ -198,7 +195,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
   );
   const lineText =
     formatLineSelectionTokens(authoredTokens, selectionGroups) || String(session.lineIndex);
-
   /** Applies a parsed line-selection expression to the session. */
   const commitLines = (raw: string, input: HTMLInputElement) => {
     const parsed = parseLineSelectionInput(raw, available, selectionGroups);
@@ -213,14 +209,18 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       (parsed.lines.includes(session.lineIndex)
         ? session.lineIndex
         : (parsed.lines.at(-1) ?? session.lineIndex));
+    selectionStateRef.current = createListSelectionState(available, parsed.lines, focus);
     session.setMultiLineSelection(parsed.lines, { tokens: parsed.tokens });
     editorLine.set(String(focus));
     renderSession();
   };
-
-  /** Applies one line-list click to the session and repaints. */
-  const commitLineClick = (index: number, shiftToggle: boolean) => {
+  /** Applies one line-list click using firstLine as the range origin and focus as the endpoint. */
+  const commitLineClick = (index: number, modifiers: ListSelectionModifiers = {}) => {
     const current = Number(editorLine.get());
+    const active = Number.isInteger(current) ? current : 0;
+    const state =
+      selectionStateRef.current ??
+      createListSelectionState(available, [...selectionRef.current], active);
     const baseTokens = tokensForSelection(
       session.multiLineTokens,
       session.multiLineIndices,
@@ -228,19 +228,24 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       selectionGroups,
     );
     const next = lineBarSelectionAfterClick(
-      Number.isInteger(current) ? current : 0,
+      active,
       session.multiLineIndices,
       index,
-      shiftToggle,
+      modifiers,
       baseTokens,
       available,
       selectionGroups,
+      state.firstLine,
     );
+    selectionStateRef.current = {
+      selection: next.selection,
+      firstLine: next.firstLine,
+      focus: next.focus,
+    };
     session.setMultiLineSelection(next.selection, { tokens: next.tokens });
     editorLine.set(String(next.current));
     renderSession();
   };
-
   /** Applies one folder-row click: add the folder, or remove its members in place. */
   const commitGroupClick = (groupIndex: number, groupName: string, indices: readonly number[]) => {
     const current = Number(editorLine.get());
@@ -272,10 +277,9 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     const safeTokens = next.length ? tokens : tokensFromLines(safe);
     session.setMultiLineSelection(safe, { tokens: safeTokens });
     editorLine.set(String(result.focus));
+    selectionStateRef.current = createListSelectionState(available, safe, result.focus);
     renderSession();
   };
-
-  /** Cancel a line marquee and remove its global pointer listeners. */
   const stopMarquee = useCallback(() => {
     if (marqueeFrame.current !== null) {
       cancelAnimationFrame(marqueeFrame.current);
@@ -290,11 +294,8 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     setMarqueePreview(null);
     setMarqueeTouched(null);
   }, []);
-
   useEffect(() => stopMarquee, [stopMarquee]);
-
-  /** Commit one marquee block: append additions, splice removals in place. */
-  const applyMarqueeSelection = (preview: MarqueePreview) => {
+  const applyMarqueeSelection = (preview: MarqueePreview, modifiers: ListSelectionModifiers) => {
     const baseTokens = tokensForSelection(
       session.multiLineTokens,
       session.multiLineIndices,
@@ -304,20 +305,33 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     const tokens =
       preview.mode === "add"
         ? addLineSelection(baseTokens, preview.lines, available, selectionGroups)
-        : subtractLineSelection(baseTokens, preview.lines, available, selectionGroups);
+        : preview.mode === "remove"
+          ? subtractLineSelection(baseTokens, preview.lines, available, selectionGroups)
+          : tokensFromLines([...preview.selection]);
     const next = resolveLineSelection(tokens, available, selectionGroups);
     const currentNow = Number(editorLine.get());
+    const state =
+      selectionStateRef.current ??
+      createListSelectionState(available, [...selectionRef.current], currentNow);
     const requested = Number.isInteger(preview.focus) ? preview.focus : currentNow;
     const safe = next.length ? next : [requested];
     const safeTokens = next.length ? tokens : tokensFromLines(safe);
-    const focused = safe.includes(requested) ? requested : (safe[0] ?? currentNow);
+    const focused = modifiers.shiftKey
+      ? resolveMarqueeFocusLine(currentNow, preview.lines, currentNow)
+      : (state.focus ?? currentNow);
+    const firstLine = modifiers.shiftKey
+      ? focused
+      : (safe[0] ?? state.firstLine ?? state.focus ?? currentNow);
+    selectionStateRef.current = {
+      selection: safe,
+      firstLine,
+      focus: focused,
+    };
     selectionRef.current = new Set(safe);
     session.setMultiLineSelection(safe, { tokens: safeTokens });
     editorLine.set(String(focused));
     renderSession();
   };
-
-  /** Return visible line rows intersecting a content-space marquee. */
   const rowsInMarquee = (from: MarqueePoint, to: MarqueePoint): number[] => {
     const container = lineListRef.current;
     if (!container) {
@@ -350,8 +364,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     }
     return rows.sort((leftRow, rightRow) => leftRow.top - rightRow.top).map((row) => row.index);
   };
-
-  /** Repaint the preview and optionally scroll when the pointer reaches an edge. */
   const updateMarquee = (allowScroll: boolean): boolean => {
     const container = lineListRef.current;
     const drag = marqueeDrag.current;
@@ -387,8 +399,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     setMarqueeTouched(new Set(rows));
     return scrolling;
   };
-
-  /** Keep repainting while edge auto-scroll can still advance the list. */
   const runMarqueeFrame = () => {
     marqueeFrame.current = null;
     if (!marqueeActive.current) {
@@ -398,17 +408,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       marqueeFrame.current = requestAnimationFrame(runMarqueeFrame);
     }
   };
-
-  /** Coalesce pointer movement and scrolling into one animation frame. */
   const scheduleMarquee = () => {
     if (marqueeFrame.current === null) {
       marqueeFrame.current = requestAnimationFrame(runMarqueeFrame);
     }
   };
-
-  /** Start the same Shift-drag line marquee used by the toolbar dropdown. */
   const beginMarquee = (event: ReactPointerEvent<HTMLElement>, index: number): boolean => {
-    if (event.button !== 0 || !event.shiftKey) {
+    if (event.button !== 0) {
       return false;
     }
     stopMarquee();
@@ -418,11 +424,22 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       return true;
     }
     const rect = container.getBoundingClientRect();
-    const drag = createMarqueeDrag(selectionRef.current, index, (preview) => {
-      applyMarqueeSelection(preview);
-    });
+    const modifiers: ListSelectionModifiers = {
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    };
+    const drag = createMarqueeDrag(
+      selectionRef.current,
+      index,
+      (preview) => {
+        applyMarqueeSelection(preview, modifiers);
+      },
+      modifiers,
+    );
     marqueeActive.current = true;
     marqueeDrag.current = drag;
+    marqueeMoved.current = false;
     const start = {
       x: listContentX(event.clientX, rect.left, container.clientLeft),
       y: listContentY(event.clientY, rect.top, container.clientTop, container.scrollTop),
@@ -433,11 +450,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     setMarqueePreview(new Set(drag.preview().selection));
     setMarqueeTouched(new Set([index]));
     setMarqueeRect(marqueeBox(start, start));
-
     const pointerId = event.pointerId;
     const move = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) {
         return;
+      }
+      if (Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) >= 4) {
+        marqueeMoved.current = true;
       }
       marqueePointer.current = { x: moveEvent.clientX, y: moveEvent.clientY };
       scheduleMarquee();
@@ -449,8 +468,13 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
       const active = marqueeDrag.current;
       if (active) {
         marqueePointer.current = { x: finishEvent.clientX, y: finishEvent.clientY };
-        updateMarquee(false);
-        active.finish();
+        if (marqueeMoved.current) {
+          updateMarquee(false);
+          active.finish();
+        } else {
+          active.cancel();
+          commitLineClick(index, modifiers);
+        }
         suppressClick.current = true;
         window.setTimeout(() => {
           suppressClick.current = false;
@@ -474,7 +498,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     }
     return true;
   };
-
   /** Folds or unfolds one folder, sharing the toolbar picker's persisted state. */
   const toggleGroupFold = (name: string) => {
     const next = new Set(collapsedGroups);
@@ -485,17 +508,7 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     }
     setLineSelectionCollapsedFolders(next);
   };
-
-  /** Index of the row that already committed from the current pointer sequence. */
   const pointerHandledIndexRef = useRef<number | null>(null);
-
-  /**
-   * Selects a row on pointer down, before the focused expression field blurs.
-   *
-   * Focusing the row first makes the field's blur commit run inside this handler;
-   * the row selection then applies after it, so both commits happen once and the
-   * row stays selected. The following click is ignored by `handleLineClick`.
-   */
   const handleLinePointerDown = (event: ReactPointerEvent<HTMLElement>, index: number) => {
     if (event.button !== 0) {
       return;
@@ -505,37 +518,36 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     }
     pointerHandledIndexRef.current = index;
     event.currentTarget.focus();
-    commitLineClick(index, event.shiftKey);
+    commitLineClick(index, {
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    });
   };
-
-  /**
-   * Handles keyboard and assistive clicks; pointer clicks already committed on
-   * pointer down. A stale pointer marker never blocks a keyboard click because
-   * those arrive with `detail` 0.
-   */
   const handleLineClick = (event: ReactMouseEvent<HTMLElement>, index: number) => {
+    if (suppressClick.current && event.detail > 0) {
+      suppressClick.current = false;
+      pointerHandledIndexRef.current = null;
+      return;
+    }
     const handledIndex = pointerHandledIndexRef.current;
     pointerHandledIndexRef.current = null;
     if (handledIndex === index && event.detail > 0) {
       return;
     }
-    commitLineClick(index, event.shiftKey);
+    commitLineClick(index, {
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    });
   };
-
-  /**
-   * Writes one multi-line window width as the slider moves.
-   *
-   * The settings binding applies the new width to the timeline viewport and
-   * invalidates the frame, so the panels resize during the drag instead of
-   * waiting for the pointer to be released.
-   */
+  /** Writes the multi-line window width and refreshes the timeline during a drag. */
   const applyWindowWidth = (raw: number) => {
     const next = clampMultiLineWindowWidth(raw);
     if (String(next) !== multiLineWindowWidth) {
       displayValues.multiLineWindowWidth.set(String(next));
     }
   };
-
   return (
     <>
       <FieldRow
@@ -574,16 +586,26 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
             }
             event.preventDefault();
           }}
+          onPointerDown={(event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement) || !target.closest("[data-line-index]")) {
+              beginMarquee(event, -1);
+            }
+          }}
         >
           {marqueeRect && (
             <span
               className="line-selection-marquee"
-              style={{
-                top: marqueeRect.top,
-                left: marqueeRect.left,
-                width: marqueeRect.width,
-                height: marqueeRect.height,
-              }}
+              style={
+                {
+                  top: marqueeRect.top,
+                  left: marqueeRect.left,
+                  width: marqueeRect.width,
+                  height: marqueeRect.height,
+                  "--line-selection-marquee-fill": readTimelineNoteMarqueeColors().fill,
+                  "--line-selection-marquee-stroke": readTimelineNoteMarqueeColors().stroke,
+                } as CSSProperties
+              }
               aria-hidden="true"
             />
           )}
@@ -732,7 +754,6 @@ export function MultiLinePanelView({ session, timeline, renderSession }: MultiLi
     </>
   );
 }
-
 /** Publishes the multi-line form snapshot for the host to mount. */
 export class MultiLinePanel {
   private readonly state: MultiLinePanelState;
@@ -741,7 +762,6 @@ export class MultiLinePanel {
   private readonly timeline: MultiLineTimeline | null;
   private renderVersion = 0;
   private disposed = false;
-
   /** Binds the panel to the live session and its render callback. */
   constructor(getSession: () => EditorSession, options: MultiLinePanelOptions) {
     this.state = options.state;
@@ -749,7 +769,6 @@ export class MultiLinePanel {
     this.renderSession = options.render ?? (() => {});
     this.timeline = options.timeline ?? null;
   }
-
   /** Publishes a new snapshot revision for the current session. */
   render(): void {
     if (this.disposed) {
@@ -769,7 +788,6 @@ export class MultiLinePanel {
       },
     });
   }
-
   /** Clears the snapshot and rejects later renders. */
   dispose(): void {
     if (this.disposed) {

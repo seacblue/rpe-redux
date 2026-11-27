@@ -29,6 +29,9 @@ import {
   closeInspector,
   bindInspectorLifecycle,
 } from "../../../inspector/controller.ts";
+import { flushBeatFieldScope } from "../../../inspector/beat/BeatField.tsx";
+import { clearNoteDraftSelection } from "../../../inspector/notes/noteInspector.ts";
+import { clearEventDraftSelection } from "../../../inspector/events/EventField.tsx";
 import {
   LinePanel,
   type LinePanelAsset,
@@ -43,6 +46,8 @@ import { viewControls } from "../commands/viewControls.ts";
 import type { EditorTimelineMode } from "../commands/viewControls.ts";
 import { pickFiles } from "../../../../../platform/filePicker.ts";
 import type { ChartIssue } from "../../../../../../core/edit/validation/chartIssueTypes.ts";
+import type { NoteHitSoundOptions } from "../../../inspector/notes/model.ts";
+import { AUDIO_EXTENSIONS } from "../../../../global/sections/assets/assetLibraryModel.ts";
 
 /** The document fields the inspector panes read and mutate. */
 export interface InspectorDocumentState {
@@ -60,6 +65,7 @@ export interface InspectorRuntime {
   readonly eventIssues: EventIssueMonitor;
   readonly linePanel: LinePanel;
   readonly assetLibrary: ReturnType<typeof createAssetLibraryRuntime>;
+  readonly hitSoundOptions: NoteHitSoundOptions;
   readonly curveEditor: ReturnType<typeof createCurveEditor>;
   readonly activatePane: (name: string) => void;
   readonly closePane: () => void;
@@ -342,6 +348,25 @@ export function createInspectorRuntime(options: {
     notify: options.notify,
     renderSession: options.renderSession,
   });
+  const hitSoundOptions: NoteHitSoundOptions = {
+    names: () =>
+      [...assetNames(options.document.assets)]
+        .filter((name) => AUDIO_EXTENSIONS.test(name))
+        .sort((left, right) => left.localeCompare(right)),
+    add: async () => {
+      const files = await pickFiles({ accept: "audio/*" });
+      if (!files?.length) {
+        return null;
+      }
+      const before = new Set(options.document.assets.keys());
+      await assetLibrary.addFiles(files);
+      return (
+        [...options.document.assets.keys()].find(
+          (name) => !before.has(name) && AUDIO_EXTENSIONS.test(name),
+        ) ?? null
+      );
+    },
+  };
   addTexture = async () => {
     const files = await pickFiles({ accept: "image/*", multiple: true });
     if (!files?.length) {
@@ -373,6 +398,28 @@ export function createInspectorRuntime(options: {
   options.timeline.gestures.curvePickPoint = curveEditor.pickPoint;
   options.timeline.gestures.curveQuickPick = curveEditor.quickPick;
   options.timeline.gestures.curveGhost = curveEditor.ghost;
+  options.scope.add(
+    bindInspectorLifecycle("notes", {
+      onClose: () => {
+        const session = getSession();
+        flushBeatFieldScope("notes", () => {
+          session.noteDraftActive = false;
+        });
+        clearNoteDraftSelection(session);
+      },
+    }),
+  );
+  options.scope.add(
+    bindInspectorLifecycle("events", {
+      onClose: () => {
+        const session = getSession();
+        flushBeatFieldScope("events", () => {
+          session.liveEventEdit = false;
+        });
+        clearEventDraftSelection(session);
+      },
+    }),
+  );
   options.scope.add(() => closeInspector(options.ui.activeInspector));
   options.scope.add(bindInspectorLifecycle("multi", { onClose: () => multiEdit.hide() }));
   // Panes stay mounted while hidden, so leaving the curve pane must end its
@@ -393,6 +440,7 @@ export function createInspectorRuntime(options: {
     eventIssues,
     linePanel,
     assetLibrary,
+    hitSoundOptions,
     curveEditor,
     activatePane,
     closePane,

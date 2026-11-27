@@ -328,6 +328,13 @@ async function loadBrowserExternalFiles(
   if (!files.length) {
     return null;
   }
+  // `.pez` is RPE's native package extension. Do not fully unzip it during the
+  // external-format preflight: browserImport creates the visible RPE task
+  // only after this probe returns, so large native packages otherwise leave the
+  // task list empty while the preflight is reading the archive.
+  if (files.length === 1 && /\.pez$/i.test(files[0].name)) {
+    return null;
+  }
   if (files.length === 1 && /\.(?:zip|pez)$/i.test(files[0].name)) {
     const bytes = new Uint8Array(await files[0].arrayBuffer());
     return loadArchiveBytes(files[0].name, async () => bytes);

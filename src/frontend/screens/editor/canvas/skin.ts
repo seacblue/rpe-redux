@@ -96,7 +96,7 @@ export class RpeSkin {
   private activeId = DEFAULT_NOTE_SKIN;
   private readonly colorKeys = new WeakMap<
     number[],
-    { r: number; g: number; b: number; prefix: string; key: string; css: string }
+    { r: number; g: number; b: number; strength: number; prefix: string; key: string; css: string }
   >();
 
   /** Create the skin with a callback invoked after a new selection decodes. */
@@ -530,20 +530,40 @@ export class RpeSkin {
     }
   }
 
-  /** Build the clamp, key, and CSS value for one tint plus its cache prefix. */
+  /** Build the clamp, key, CSS value, and optional selection strength for one tint. */
   private colorKey(
     prefix: string,
     color: number[],
-  ): { r: number; g: number; b: number; key: string; css: string } {
+    includeStrength = false,
+  ): { r: number; g: number; b: number; strength: number; key: string; css: string } {
     const r = Math.round(Math.max(0, Math.min(255, color[0] ?? 255)));
     const g = Math.round(Math.max(0, Math.min(255, color[1] ?? 255)));
     const b = Math.round(Math.max(0, Math.min(255, color[2] ?? 255)));
+    const strength = includeStrength
+      ? Math.max(0, Math.min(1, Number.isFinite(color[3]) ? color[3] : 1))
+      : 1;
+    const suffix = includeStrength ? `,${strength}` : "";
     const cached = this.colorKeys.get(color);
-    if (cached && cached.r === r && cached.g === g && cached.b === b && cached.prefix === prefix) {
+    if (
+      cached &&
+      cached.r === r &&
+      cached.g === g &&
+      cached.b === b &&
+      cached.strength === strength &&
+      cached.prefix === prefix
+    ) {
       return cached;
     }
     const css = `rgb(${r},${g},${b})`;
-    const entry = { r, g, b, prefix, key: `${prefix}${r},${g},${b}`, css };
+    const entry = {
+      r,
+      g,
+      b,
+      strength,
+      prefix,
+      key: `${prefix}${r},${g},${b}${suffix}`,
+      css,
+    };
     this.colorKeys.set(color, entry);
     return entry;
   }
@@ -599,7 +619,7 @@ export class RpeSkin {
     if (!picture) {
       return null;
     }
-    const { key, css } = this.colorKey(`colorized:${name}:`, color);
+    const { key, css, strength } = this.colorKey(`colorized:${name}:`, color, true);
     if (!this.tints.has(key)) {
       this.reserveTint(picture.naturalWidth, picture.naturalHeight);
       const canvas = document.createElement("canvas");
@@ -610,7 +630,10 @@ export class RpeSkin {
         return null;
       }
       context.drawImage(picture, 0, 0);
-      context.globalCompositeOperation = "source-in";
+      // Selection alpha controls recolouring strength while preserving the
+      // source texture's own alpha and luminance at low strengths.
+      context.globalCompositeOperation = "source-atop";
+      context.globalAlpha = strength;
       context.fillStyle = css;
       context.fillRect(0, 0, canvas.width, canvas.height);
       this.tints.set(key, canvas);

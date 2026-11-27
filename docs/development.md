@@ -82,7 +82,7 @@ npm run build:docs           # Extension SDK documentation site
 npm run build:server         # target-specific Go sidecar
 npm run build:icons          # regenerate both theme icon packages
 npm run build:font           # regenerate the CJK UI subset and lazy slices
-npm run deps:check           # pinned and staged FFmpeg/Cloudflared versions, offline
+npm run deps:check           # staged FFmpeg/Cloudflared status, offline
 npm run check                # types, lint, style, docs, icons, SDK, extensions, unit, and Go tests
 npm run check:native         # Rust formatting and compile check
 npm run verify               # check + formatting
@@ -98,7 +98,7 @@ npm run dev:collab           # standalone collaboration room server
 
 ### Builds without the bundled tools
 
-`--without-bundled-tools` skips the pinned FFmpeg and Cloudflare Tunnel downloads. It applies to `npm run build` and `npm run dev:desktop`, so work that does not touch chart export or public rooms does not wait for them. The application still starts; the affected features degrade with a warning notice instead of failing. Chart export reports that the build has no encoder, and hosting a room uses the LAN bridge instead of a Cloudflare tunnel. Release packaging always stages both tools: publish from a build without the flag.
+Local `npm run build` and `npm run dev:desktop` never resolve a vendor's latest FFmpeg or Cloudflare Tunnel release. They reuse a tool already staged on the machine, or leave the optional feature unavailable, so testing does not require network access. `--without-bundled-tools` explicitly leaves both tools out and makes the same fallback visible in the packaged build. The application still starts; chart export reports that the build has no encoder, and hosting a room uses the LAN bridge instead of a Cloudflare tunnel. Release CI sets `REDUX_RELEASE_BUILD=1`, resolves both vendors' latest stable assets, verifies them, and fails if either cannot be staged.
 
 ### Changesets and release notes
 

@@ -258,7 +258,11 @@ test("index.json references every markdown page exactly once", async () => {
   const referenced = new Set();
   const slugs = new Set();
   for (const section of index.sections) {
-    for (const page of section.pages) {
+    const pages = [
+      ...(section.pages ?? []),
+      ...(section.groups ?? []).flatMap((group) => group.pages ?? []),
+    ];
+    for (const page of pages) {
       assert.match(page.slug, /^[a-z0-9][a-z0-9-]*$/);
       assert.ok(!slugs.has(page.slug), `duplicate slug ${page.slug}`);
       slugs.add(page.slug);
@@ -335,10 +339,11 @@ test("build writes the shell, content index, and search fields", async () => {
       }
     };
     visitNav(nav);
+    const navigablePages = pages.filter((page) => page.kind !== "api-index");
     assert.deepEqual(
       [...navRoutes].sort(),
-      pages.map((page) => page.route).sort(),
-      "every page appears once in the navigation tree",
+      navigablePages.map((page) => page.route).sort(),
+      "every navigable page appears once in the navigation tree",
     );
   } finally {
     await rm(outDir, { recursive: true, force: true });

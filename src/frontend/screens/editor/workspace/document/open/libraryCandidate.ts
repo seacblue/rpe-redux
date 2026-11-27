@@ -10,6 +10,7 @@ import type {
 } from "../../../../../../core/global/document/types.ts";
 import type { ChartDocument } from "../../../../../../core/global/chart/streaming/chartDocument.ts";
 import type { LibraryViewState } from "../../../../../../core/global/library/types.ts";
+import { parseChartEditSeconds } from "../../../../../../core/global/chart/editTime.ts";
 
 interface LibraryProjectSource {
   name?: string;
@@ -19,6 +20,20 @@ interface LibraryProjectSource {
   background?: string;
   assetFolders?: string[];
   viewState?: LibraryViewState;
+  editSeconds?: number;
+}
+
+/** Backfill chartTime for projects created before the chart root carried it. */
+function chartWithProjectEditTime(project: LibraryProjectSource): unknown {
+  if (!project.chart || typeof project.chart !== "object") {
+    return project.chart;
+  }
+  const chart = project.chart as Record<string, unknown>;
+  if (parseChartEditSeconds(chart.chartTime) !== null) {
+    return project.chart;
+  }
+  const seconds = parseChartEditSeconds(project.editSeconds);
+  return seconds === null ? project.chart : { ...chart, chartTime: seconds };
 }
 
 /** Maps a library project payload to an unvalidated editor candidate. */
@@ -26,7 +41,7 @@ export function libraryCandidate(project: LibraryProjectSource, id: string): Edi
   const name =
     project.name || String((project.chart as UnvalidatedChart | null)?.META?.name ?? "chart.json");
   return {
-    chart: project.chart,
+    chart: chartWithProjectEditTime(project),
     name,
     project: {
       id,

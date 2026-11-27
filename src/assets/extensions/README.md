@@ -17,6 +17,6 @@ The host validates the manifest and capability names. Catalog keys are bare; `ex
 
 ## Official packages
 
-`builtin.official` registers the requested note transforms: `MirrorY`, `MirrorMid`, `SideSwitch`, `SideUp`, `SideDown`, `ToReal`, `ToFake`, `ToTap`, `ToFlick`, `ToDrag`, and `ToHold`. It is intentionally readable: copy the package into a user Extension and change one transform to learn the SDK boundary.
+`builtin.official` registers the requested note transforms: `MirrorY`, `MirrorMid`, `SideSwitch`, `SideUp`, `SideDown`, `ToReal`, `ToFake`, `ToTap`, `ToFlick`, `ToDrag`, and `ToHold`. The package is intentionally readable: copy it into a user Extension and change one contribution to learn the SDK boundary.
 
-`builtin.official` is the only built-in package. Packages a user installs or drops beside the application live in the host's `extensions/` roots and are not part of this tree; see [Extensions](../../../docs/extensions.md) for the full contract.
+These are the built-in packages. Packages a user installs or drops beside the application live in the host's `extensions/` roots and are not part of this tree; see [Extensions](../../../docs/extensions.md) for the full contract.

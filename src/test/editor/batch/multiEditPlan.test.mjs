@@ -5,12 +5,13 @@ import { beatValue, fromNumber } from "../../../core/global/chart/timing/beat.ts
 import { HOOK_TAIL_FIELD } from "../../../core/global/chart/chart.ts";
 import {
   EVENT_BATCH_FIELDS,
-  NOTE_BATCH_FIELDS,
+  noteBatchFields,
   BATCH_OPERATIONS,
 } from "../../../core/edit/multiEdit/planVocabulary.ts";
 import { previewMultiEdit } from "../../../core/edit/multiEdit/plan.ts";
 import { registerDeferredCatalogs } from "../../../i18n/deferred.ts";
 import { getLanguage, setLanguage, t } from "../../../i18n/index.ts";
+import { noteFields } from "../../../core/global/chart/noteFields.ts";
 
 test("event multi-edit omits duration and order and lists start before end", () => {
   assert.deepEqual(
@@ -24,7 +25,7 @@ test("batch labels resolve after the editor catalog is registered", () => {
   registerDeferredCatalogs();
   try {
     setLanguage("zh");
-    const field = NOTE_BATCH_FIELDS.find(([key]) => key === "x");
+    const field = noteBatchFields().find(([key]) => key === "x");
     const operation = BATCH_OPERATIONS.find(([key]) => key === "By");
     assert.equal(field?.[1], "editor.commands.multiEdit.channel.x");
     assert.equal(operation?.[1], "editor.commands.multiEdit.operation.by");
@@ -32,6 +33,79 @@ test("batch labels resolve after the editor catalog is registered", () => {
     assert.equal(t(operation?.[1]), "By，增减");
   } finally {
     setLanguage(previous);
+  }
+});
+
+test("note hand is a native batch field with categorical To semantics", () => {
+  noteFields.register({
+    id: "hand",
+    field: "hand",
+    label: "Hand",
+    kind: "select",
+    options: [
+      ["", "Unmarked"],
+      ["left", "Left"],
+      ["right", "Right"],
+    ],
+  });
+  try {
+    assert.ok(noteBatchFields().some(([key]) => key === "hand"));
+    const note = {
+      type: 1,
+      startTime: [0, 0, 1],
+      endTime: [0, 0, 1],
+      positionX: 0,
+    };
+    const snapshot = {
+      chart: { judgeLineList: [{ notes: [note], numOfNotes: 1 }] },
+      lineIndex: 0,
+      eventLayer: 0,
+      focus: "notes",
+      notes: [{ index: 0, lineIndex: 0, note }],
+      events: [],
+    };
+    const result = previewMultiEdit(snapshot, "notes", {
+      field: "hand",
+      operation: "By",
+      lower: "left",
+      upper: "right",
+    });
+    assert.equal(result.changes[0].after.hand, "left");
+  } finally {
+    noteFields.unregister("hand");
+  }
+});
+
+test("numeric contributed note fields keep the standard batch operations", () => {
+  noteFields.register({
+    id: "test-number",
+    field: "testNumber",
+    label: "Test number",
+    kind: "number",
+  });
+  try {
+    const note = {
+      type: 1,
+      startTime: [0, 0, 1],
+      endTime: [0, 0, 1],
+      positionX: 0,
+      testNumber: 3,
+    };
+    const result = previewMultiEdit(
+      {
+        chart: { judgeLineList: [{ notes: [note], numOfNotes: 1 }] },
+        lineIndex: 0,
+        eventLayer: 0,
+        focus: "notes",
+        notes: [{ index: 0, lineIndex: 0, note }],
+        events: [],
+      },
+      "notes",
+      { field: "testNumber", operation: "By", lower: "2", upper: "2" },
+    );
+    assert.equal(result.changes[0].after.testNumber, 5);
+  } finally {
+    noteFields.unregister("test-number");
   }
 });
 

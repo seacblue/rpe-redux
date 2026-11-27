@@ -55,3 +55,18 @@ test("a completed save keeps the created project", async () => {
   assert.equal(saved.created, true);
   assert.deepEqual(fake.removed, []);
 });
+
+test("saving does not remove a live generated thumbnail from the asset map", async () => {
+  const assets = new Map([["__redux/thumbnail.png", new Uint8Array([1, 2, 3])]]);
+  const fake = library({ fail: false });
+
+  await saveLibraryDocument({
+    library: fake,
+    chart: { META: { background: "" } },
+    chartJson: '{"META":{"background":""}}',
+    name: "thumbnail cleanup",
+    assets,
+  });
+
+  assert.equal(assets.has("__redux/thumbnail.png"), true);
+});

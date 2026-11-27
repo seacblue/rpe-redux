@@ -79,6 +79,63 @@ test("reused guide groups match fresh groups and retain their storage", () => {
   assert.ok(actual.every((group) => firstStorage.includes(group.indices)));
 });
 
+test("guide labels keep a merged pair stable through the distance threshold", () => {
+  const groups = [];
+  const atDistance = (distance) => [
+    { index: 0, x: 100, y: 100, rotation: 0 },
+    { index: 1, x: 100 + distance, y: 100, rotation: 0 },
+  ];
+
+  mergeGuidesInto(atDistance(9.8), 1, true, groups);
+  assert.deepEqual(
+    groups.map((group) => group.indices),
+    [[0, 1]],
+  );
+
+  mergeGuidesInto(atDistance(10.5), 1, true, groups);
+  assert.deepEqual(
+    groups.map((group) => group.indices),
+    [[0, 1]],
+    "a sub-pixel motion around the merge boundary must not split the label",
+  );
+
+  mergeGuidesInto(atDistance(13), 1, true, groups);
+  assert.deepEqual(
+    groups.map((group) => group.indices),
+    [[0], [1]],
+  );
+});
+
+test("indexed guide merging searches the hysteresis band", () => {
+  const groups = [];
+  const withMovingPair = (distance) => [
+    ...Array.from({ length: 40 }, (_, index) => ({
+      index,
+      x: index * 40,
+      y: 2000,
+      rotation: 0,
+    })),
+    { index: 40, x: 1009, y: 1000, rotation: 0 },
+    { index: 41, x: 1009 + distance, y: 1000, rotation: 0 },
+    ...Array.from({ length: 22 }, (_, index) => ({
+      index: index + 42,
+      x: 4000 + index * 40,
+      y: 1000,
+      rotation: 0,
+    })),
+  ];
+
+  mergeGuidesInto(withMovingPair(9.8), 1, true, groups);
+  assert.deepEqual(groups.find((group) => group.indices.includes(40))?.indices, [40, 41]);
+
+  mergeGuidesInto(withMovingPair(11.5), 1, true, groups);
+  assert.deepEqual(
+    groups.find((group) => group.indices.includes(40))?.indices,
+    [40, 41],
+    "the indexed lookup must include cells two steps away in the hysteresis band",
+  );
+});
+
 test("visible guide labels paint directly and off-screen labels are culled", () => {
   const previousDocument = globalThis.document;
   const previousGetComputedStyle = globalThis.getComputedStyle;

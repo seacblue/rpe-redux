@@ -11,8 +11,15 @@ import {
   timelineEmptyPanPress,
   timelineSweepEnabled,
 } from "../../../../../../core/edit/timeline/selection.ts";
-import { moveTimelineNote } from "../../../../../../core/edit/timeline/dragPreview.ts";
+import {
+  moveTimelineNote,
+  previewChartForNoteDrag,
+} from "../../../../../../core/edit/timeline/dragPreview.ts";
 import { setTimelineDragPreview } from "../../../../../../core/edit/timeline/dragPreviewState.ts";
+import {
+  canOpenOverlapMenu,
+  updateOverlapPress,
+} from "../../../../../../core/edit/timeline/overlapPress.ts";
 import {
   dragPrekeyHeld,
   selectedHoldTarget,
@@ -26,7 +33,7 @@ import type {
 } from "../../../../../../core/edit/timeline/types.ts";
 import type { TimelineNoteInteractionReceiver } from "../drawing/timelineReceiver.ts";
 import { captureNoteBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
-import { hits } from "./noteHitTest.ts";
+import { holdPart, hits } from "./noteHitTest.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
@@ -34,6 +41,14 @@ import {
 import { selectOverlappingNote } from "./noteSelectionDrawing.ts";
 import { lockSweepArea, timelineSweepMode } from "../selection/sweepSelection.ts";
 import { pointerTimingEnd, pointerTimingStart } from "../interaction/timelineGestures.ts";
+import { SELECTION_SHORTCUT_IDS } from "../../../../../../core/edit/selection/control.ts";
+import { matchesSelectionShortcut } from "../selection/selectionShortcuts.ts";
+import {
+  captureNoteDragGeometry,
+  noteDragPoint,
+  noteDragSeconds,
+  noteDragWidth,
+} from "./noteDragGeometry.ts";
 
 /** Publish the live edge of a prekey Hold drag for the inspector. */
 function syncNoteDragPreview(
@@ -49,23 +64,39 @@ function syncNoteDragPreview(
     kind: "note",
     lineIndex: entry.lineIndex,
     index: entry.index,
-    // A prekey drag is always an edge drag, which never reads positionX.
+    // A prekey drag previews both the Hold edge time and its horizontal move.
     note: receiver.movedNote(entry.note as TimelineNote),
   });
 }
 
+/** Publish the live chart proposal used by the realtime preview during a note drag. */
+function syncNoteDragPreviewChart(
+  receiver: TimelineNoteInteractionReceiver,
+  session: EditorSession,
+): void {
+  const drag = receiver.gestures.drag;
+  if (!drag || !["move", "startTime", "endTime"].includes(drag.kind)) {
+    receiver.setPreviewChart(null);
+    return;
+  }
+  receiver.setPreviewChart(previewChartForNoteDrag(session, (note) => receiver.movedNote(note)));
+}
+
 /** The note with the active drag applied, for drawing and commit. */
 export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineNote): TimelineNote {
-  const panelWidth = this.viewport.panelWidth(this.notesCanvas.clientWidth, "notes");
+  const geometry = this.gestures.drag?.geometry;
+  const panelWidth =
+    geometry?.panelWidth ?? this.viewport.panelWidth(this.notesCanvas.clientWidth, "notes");
   return moveTimelineNote(note, this.gestures.drag, this.getSession(), {
     tempo: this.viewport.tempo,
     origin: this.viewport.origin,
-    scale: this.viewport.scaleForArea("notes"),
+    scale: geometry?.scale ?? this.viewport.scaleForArea("notes"),
     division: this.viewport.division,
     panelWidth,
     inset: this.viewport.noteInset(panelWidth),
     gridCount: this.viewport.gridCount,
     snapX: this.viewport.snapX,
+    snapY: this.viewport.snapY,
     factor: this.viewport.noteFactorForLine(
       this.gestures.drag?.lineIndex ?? this.getSession().lineIndex,
     ),
@@ -74,14 +105,20 @@ export function movedNote(this: TimelineNoteInteractionReceiver, note: TimelineN
 
 /** Track the note cursor and advance the active note drag or pan. */
 export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent): void {
-  this.gestures.cursor = this.viewport.point(event);
-  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(
-    this.gestures.cursor.x,
-    this.notesCanvas.clientWidth,
-    "notes",
-  );
+  const width = noteDragWidth(this.gestures.drag, this.notesCanvas.clientWidth);
+  this.gestures.cursor = noteDragPoint(this, event, this.gestures.drag);
+  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(this.gestures.cursor.x, width, "notes");
   this.gestures.clipboardPointer = this.gestures.cursor;
   this.gestures.hoverArea = "notes";
+  if (!this.gestures.drag) {
+    this.setPreviewChart(null);
+  }
+  if (this.gestures.overlapPress) {
+    this.gestures.overlapPress = updateOverlapPress(
+      this.gestures.overlapPress,
+      this.gestures.cursor,
+    );
+  }
   // A pan belongs to the pointer that started it; another pointer moving over
   // the canvas must not steal it or corrupt the drag's previous sample.
   if (
@@ -92,21 +129,18 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     return;
   }
   if (this.gestures.drag) {
-    const previous = this.gestures.drag.current;
-    this.gestures.drag.current = this.gestures.cursor;
+    const drag = this.gestures.drag;
+    const previous = drag.current;
+    drag.current = this.gestures.cursor;
     this.gestures.drag.currentWorldX =
-      this.gestures.cursor.x +
-      this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
-    if (this.gestures.drag.startFactor !== undefined) {
-      this.gestures.drag.currentSeconds =
-        this.viewport.tempo.seconds(this.viewport.origin) +
-        (this.viewport.viewHeight() -
-          this.viewport.judgementOffset -
-          this.gestures.drag.current.y) /
-          this.viewport.scaleForArea("notes");
+      this.gestures.cursor.x + this.viewport.multiLineViewportOffset(width, "notes");
+    if (drag.startFactor !== undefined) {
+      drag.currentSeconds = noteDragSeconds(this, drag);
     }
-    if (syncNoteDragPreview(this, this.getSession())) {
-      this.getSession().notify("selection");
+    const session = this.getSession();
+    syncNoteDragPreviewChart(this, session);
+    if (syncNoteDragPreview(this, session)) {
+      session.notify("selection");
     }
     if (this.gestures.drag.kind === "multi-pan") {
       // Pan through the clamped viewport seam so the note and event fields
@@ -116,7 +150,7 @@ export function move(this: TimelineNoteInteractionReceiver, event: PointerEvent)
         this.notesCanvas.style.cursor = "grabbing";
       }
       if (deltaX !== 0) {
-        this.viewport.panMultiLine(this.notesCanvas.clientWidth, deltaX, "notes");
+        this.viewport.panMultiLine(width, deltaX, "notes");
         this.changed();
       }
       return;
@@ -193,12 +227,35 @@ export function overlapActions(
   }));
 }
 
+/** Picks the note beneath the timeline cursor for a keyboard curve shortcut. */
+export function quickPickAtCursor(this: TimelineNoteInteractionReceiver): boolean {
+  const position = this.gestures.cursor;
+  if (!position || this.gestures.hoverArea !== "notes") {
+    return false;
+  }
+  const hit = this.hit(position);
+  if (!hit || !this.gestures.curveQuickPick) {
+    return false;
+  }
+  const session = this.getSession();
+  if (hit.lineIndex !== session.lineIndex) {
+    session.selectLine(hit.lineIndex);
+  }
+  if (!this.gestures.curveQuickPick(hit.item, hit.index, hit.lineIndex)) {
+    return false;
+  }
+  session.focus = "notes";
+  this.changed();
+  return true;
+}
+
 /** Handle a note-field press: selection, drag start, placement, or marquee. */
 export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent): void {
-  if (![0, 1, 2].includes(event.button)) {
+  if (![0, 2].includes(event.button)) {
     return;
   }
   event.preventDefault?.();
+  this.setPreviewChart(null);
   if (this.finishRectangle(event)) {
     return;
   }
@@ -206,15 +263,13 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     this.notesCanvas.focus({ preventScroll: true });
   }
   this.notesCanvas.setPointerCapture(event.pointerId);
-  const position = this.viewport.point(event);
+  const geometry = captureNoteDragGeometry(this);
+  const position = this.viewport.point(event, this.notesCanvas, geometry);
   this.gestures.cursor = position;
-  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(
-    position.x,
-    this.notesCanvas.clientWidth,
-    "notes",
-  );
+  this.gestures.cursorLineIndex = this.viewport.lineIndexAt(position.x, geometry.width, "notes");
   this.gestures.clipboardPointer = position;
   this.gestures.hoverArea = "notes";
+  this.gestures.overlapPress = null;
   // An armed offset pick owns the next left press before any note hit test runs:
   // it targets a grid line, so a note under the pointer must not be selected,
   // dragged, or treated as the pick target.
@@ -224,9 +279,54 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   ) {
     return;
   }
-  const hit = this.hit(position);
   const session = this.getSession();
+  const selectNote = matchesSelectionShortcut(
+    SELECTION_SHORTCUT_IDS.note,
+    event,
+    "notes",
+    "timeline",
+    event.target,
+  );
+  const toggleSelection = matchesSelectionShortcut(
+    SELECTION_SHORTCUT_IDS.toggle,
+    event,
+    "notes",
+    "timeline",
+    event.target,
+  );
+  const marqueeSelection = matchesSelectionShortcut(
+    SELECTION_SHORTCUT_IDS.marquee,
+    event,
+    "notes",
+    "timeline",
+    event.target,
+  );
+  const marqueeRemove = matchesSelectionShortcut(
+    SELECTION_SHORTCUT_IDS.marqueeRemove,
+    event,
+    "notes",
+    "timeline",
+    event.target,
+  );
+  let hit = this.hit(position);
   const dragPrekey = dragPrekeyHeld();
+  const overlapEligible =
+    selectNote && !dragPrekey && !this.gestures.tool && !this.gestures.pendingHold;
+  const overlapping = overlapEligible ? hits.call(this, position) : [];
+  if (overlapping.length > 1) {
+    const selected = overlapping.find((entry) =>
+      session
+        .selectedNoteEntries()
+        .some(
+          (selectedEntry) =>
+            selectedEntry.lineIndex === entry.lineIndex && selectedEntry.index === entry.index,
+        ),
+    );
+    if (selected) {
+      hit = selected;
+    }
+    this.gestures.overlapPress = { start: position, moved: false };
+  }
   const multiMode = session.multiLineActive;
   const panelCount = this.viewport.panelCount("notes");
   const multiPanel = multiMode && panelCount > 1;
@@ -261,6 +361,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: prekeyHold.index,
       lineIndex,
+      geometry,
       startFactor: factor,
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -295,6 +396,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: hit.index,
       lineIndex,
+      geometry,
       startFactor: this.viewport.noteFactorForLine(lineIndex),
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -307,60 +409,6 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.notify();
     this.changed();
     return;
-  }
-  // A Ctrl+left press on a Hold head trims the head instead of opening the
-  // curve quick pick; elsewhere Ctrl+left keeps starting the quick pick.
-  if (
-    event.button === 0 &&
-    event.ctrlKey &&
-    !event.shiftKey &&
-    !event.altKey &&
-    hit?.item.type === 2
-  ) {
-    const lineIndex = hit.lineIndex ?? session.lineIndex;
-    const startY = session.multiLineActive
-      ? this.viewport.noteVerticalForLine(hit.start, lineIndex, this.notesCanvas.clientHeight)
-      : this.viewport.vertical(hit.start);
-    if (Math.abs(position.y - startY) <= 8) {
-      if (lineIndex !== session.lineIndex) {
-        session.selectLine(lineIndex);
-      }
-      session.selection.clear();
-      session.selection.add(hit.index);
-      session.selectionMode = "single";
-      session.focus = "notes";
-      this.gestures.drag = {
-        kind: "startTime",
-        start: position,
-        current: position,
-        anchor: hit.index,
-        lineIndex,
-        startFactor: this.viewport.noteFactorForLine(lineIndex),
-        currentSeconds:
-          this.viewport.tempo.seconds(this.viewport.origin) +
-          (this.viewport.viewHeight() - this.viewport.judgementOffset - position.y) /
-            this.viewport.scaleForArea("notes"),
-        originSeconds: this.viewport.tempo.seconds(this.viewport.origin),
-      };
-      this.notesCanvas.setPointerCapture(event.pointerId);
-      session.notify();
-      this.changed();
-      return;
-    }
-  }
-  // A Ctrl+click on a note is the curve-note quick pick; it must win over the
-  // ordinary additive selection and any sweep shortcut bound to the same press.
-  if (event.button === 0 && event.ctrlKey && !event.shiftKey && !event.altKey && hit) {
-    // The curve is generated on the active line, so a pick on another
-    // multi-line panel must make that line active before the anchor is stored.
-    if (hit.lineIndex !== session.lineIndex) {
-      session.selectLine(hit.lineIndex);
-    }
-    if (this.gestures.curveQuickPick?.(hit.item, hit.index, hit.lineIndex)) {
-      session.focus = "notes";
-      this.changed();
-      return;
-    }
   }
   // A split multi-line timeline owns every sweep-free press: the primary button
   // pans, and both sweep buttons stay off so the gesture cannot be reintroduced
@@ -397,10 +445,10 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   if (event.button === 2) {
     return;
   }
-  if (event.button === 0 && !event.ctrlKey && !event.shiftKey) {
+  if (selectNote) {
     session.marqueeSelection = null;
   }
-  if (event.ctrlKey || event.shiftKey || event.button === 1) {
+  if (toggleSelection || marqueeSelection || marqueeRemove) {
     session.multiSelectionIntent = "notes";
   } else {
     session.multiSelectionIntent = null;
@@ -429,43 +477,39 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
   ) {
     return;
   }
-  if (
-    event.button === 0 &&
-    !event.ctrlKey &&
-    !event.shiftKey &&
-    !this.gestures.tool &&
-    !this.gestures.pendingHold
-  ) {
-    const overlapping = hits.call(this, position);
-    if (overlapping.length > 1) {
-      // Open after the click that follows this press. A native popover opened
-      // during pointerdown reads that same click as an outside click and
-      // closes immediately, so let the click finish and defer once more.
-      const canvas = this.notesCanvas;
-      const actions = overlapActions(this, overlapping);
-      canvas.addEventListener(
-        "click",
-        () => {
-          this.gestures.overlapMenuOpen = true;
-          this.gestures.overlapHover = null;
-          this.changed();
-          openOverlapMenu(
-            canvas,
-            event.clientX,
-            event.clientY,
-            t("editor.overlap.title"),
-            actions,
-            () => {
-              this.gestures.overlapMenuOpen = false;
-              this.gestures.overlapHover = null;
-              this.changed();
-            },
-          );
-        },
-        { once: true },
-      );
-      return;
-    }
+  if (overlapping.length > 1) {
+    // Open after an in-place click. A native popover opened during pointerdown
+    // reads that same click as an outside click and closes immediately, so let
+    // the click finish and defer once more. A moved press continues through the
+    // normal note-selection and drag path below.
+    const canvas = this.notesCanvas;
+    const actions = overlapActions(this, overlapping);
+    canvas.addEventListener(
+      "click",
+      () => {
+        const press = this.gestures.overlapPress;
+        this.gestures.overlapPress = null;
+        if (!canOpenOverlapMenu(press)) {
+          return;
+        }
+        this.gestures.overlapMenuOpen = true;
+        this.gestures.overlapHover = null;
+        this.changed();
+        openOverlapMenu(
+          canvas,
+          event.clientX,
+          event.clientY,
+          t("editor.overlap.title"),
+          actions,
+          () => {
+            this.gestures.overlapMenuOpen = false;
+            this.gestures.overlapHover = null;
+            this.changed();
+          },
+        );
+      },
+      { once: true },
+    );
   }
   if (event.button === 0) {
     session.selectionRevision += 1;
@@ -478,15 +522,14 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.selectLine(hit.lineIndex);
   }
   session.focus = "notes";
-  if (!panBlank && !event.ctrlKey && !event.shiftKey && event.button !== 1) {
+  if (!panBlank && !toggleSelection && !marqueeSelection && !marqueeRemove) {
     session.eventSelection.clear();
   }
   if (
     !panBlank &&
     event.button === 0 &&
     !hit &&
-    !event.ctrlKey &&
-    !event.shiftKey &&
+    selectNote &&
     !this.gestures.tool &&
     !this.gestures.pendingHold
   ) {
@@ -495,15 +538,11 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     session.multiSelectionIntent = null;
     session.selectionMode = "none";
   }
-  if (
-    event.button === 0 &&
-    (this.gestures.pendingHold || (this.gestures.tool && !event.shiftKey && !event.ctrlKey)) &&
-    !panBlank
-  ) {
+  if (selectNote && (this.gestures.pendingHold || this.gestures.tool) && !panBlank) {
     this.addAtCursor(this.gestures.pendingHold ? 2 : this.gestures.tool);
     return;
   }
-  if (multiMode && (event.shiftKey || event.button === 1)) {
+  if (multiMode && (marqueeSelection || marqueeRemove)) {
     const worldX =
       position.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
     const baselineStarted = pointerTimingStart();
@@ -525,7 +564,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       currentWorldX: worldX,
       append: true,
-      remove: event.altKey,
+      remove: marqueeRemove,
       historyKey: marqueeHistoryKey(session),
       ...baseline,
     };
@@ -535,9 +574,9 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       pointerId: event.pointerId,
       start: position,
       current: position,
-      clearOnClick: !event.ctrlKey && !event.shiftKey,
+      clearOnClick: !toggleSelection && !marqueeSelection && !marqueeRemove,
     };
-  } else if (!multiMode && (event.shiftKey || event.button === 1)) {
+  } else if (!multiMode && (marqueeSelection || marqueeRemove)) {
     const baselineStarted = pointerTimingStart();
     const baseline = captureNoteBaseline(session, true);
     pointerTimingEnd(baselineStarted, "noteBaselineCopy");
@@ -555,16 +594,16 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
           this.viewport.scaleForArea("notes"),
       current: position,
       append: true,
-      remove: event.altKey,
+      remove: marqueeRemove,
       historyKey: marqueeHistoryKey(session),
       ...baseline,
     };
-  } else if (hit && event.button === 0) {
+  } else if (hit && (selectNote || toggleSelection)) {
     const lineSelection = session.multiLineActive
       ? new Set(session.multiLineSelection?.get(hit.lineIndex) ?? [])
       : session.selection;
     const wasSelected = lineSelection.has(hit.index);
-    if (event.ctrlKey) {
+    if (toggleSelection) {
       if (lineSelection.has(hit.index)) {
         lineSelection.delete(hit.index);
       } else {
@@ -577,7 +616,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     // multi-line mode clear selections belonging to other panels as well;
     // otherwise clicking a single Hold can accidentally turn into a
     // multi-selection drag.
-    if (session.multiLineActive && !event.ctrlKey && !wasSelected) {
+    if (session.multiLineActive && !toggleSelection && !wasSelected) {
       session.multiLineSelection?.clear();
       lineSelection.clear();
       lineSelection.add(hit.index);
@@ -589,22 +628,24 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
     const hasSelection =
       session.selection.size > 0 ||
       [...session.multiLineSelection.values()].some((selection) => selection.size > 0);
-    session.selectionMode = !hasSelection ? "none" : event.ctrlKey ? "multi" : "single";
+    session.selectionMode = !hasSelection ? "none" : toggleSelection ? "multi" : "single";
+    if (toggleSelection) {
+      session.notify();
+      this.changed();
+      return;
+    }
     if (!session.editable) {
       session.notify();
       this.changed();
       return;
     }
-    const hitVertical = (beat: number) =>
-      session.multiLineActive
-        ? this.viewport.noteVerticalForLine(beat, hit.lineIndex, this.notesCanvas.clientHeight)
-        : this.viewport.vertical(beat);
+    const part = hit.item.type === 2 ? holdPart.call(this, hit, position) : null;
     const kind =
       dragPrekey && hit.item.type === 2
         ? "startTime"
-        : hit.item.type === 2 && Math.abs(position.y - hitVertical(hit.end)) <= 8
+        : part === "tail"
           ? "endTime"
-          : hit.item.type === 2 && Math.abs(position.y - hitVertical(hit.start)) <= 8
+          : part === "head"
             ? "startTime"
             : "move";
     this.gestures.drag = {
@@ -614,6 +655,7 @@ export function down(this: TimelineNoteInteractionReceiver, event: PointerEvent)
       current: position,
       anchor: hit.index,
       lineIndex: hit.lineIndex,
+      geometry,
       startFactor: this.viewport.noteFactorForLine(hit.lineIndex ?? session.lineIndex),
       currentSeconds:
         this.viewport.tempo.seconds(this.viewport.origin) +
@@ -670,16 +712,14 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     return;
   }
   const drag = this.gestures.drag;
-  drag.current = this.viewport.point(event);
-  drag.currentWorldX =
-    drag.current.x + this.viewport.multiLineViewportOffset(this.notesCanvas.clientWidth, "notes");
+  const width = noteDragWidth(drag, this.notesCanvas.clientWidth);
+  drag.current = noteDragPoint(this, event, drag);
+  drag.currentWorldX = drag.current.x + this.viewport.multiLineViewportOffset(width, "notes");
   if (drag.startFactor !== undefined) {
-    drag.currentSeconds =
-      this.viewport.tempo.seconds(this.viewport.origin) +
-      (this.viewport.viewHeight() - this.viewport.judgementOffset - drag.current.y) /
-        this.viewport.scaleForArea("notes");
+    drag.currentSeconds = noteDragSeconds(this, drag);
   }
   const session = this.getSession();
+  this.setPreviewChart(null);
   if (drag.kind === "rectangle") {
     if (!drag.finished) {
       this.changed();
@@ -726,9 +766,10 @@ export function up(this: TimelineNoteInteractionReceiver, event: PointerEvent): 
     const changed =
       !startsAtPointer ||
       session.selectedNoteEntries().some(({ note }) => {
-        // A prekey drag is always an edge drag, which never reads positionX.
+        // A prekey drag may move the Hold edge and the note horizontally.
         const next = this.movedNote(note as TimelineNote);
         return (
+          next.positionX !== note.positionX ||
           compareBeats(next.startTime, note.startTime) !== 0 ||
           compareBeats(next.endTime, note.endTime) !== 0
         );

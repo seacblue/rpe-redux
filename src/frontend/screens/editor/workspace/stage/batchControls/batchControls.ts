@@ -9,7 +9,11 @@ import type { EditorSession } from "../../../../../../core/edit/session/session.
 import type { SelectionSnapshot } from "../../../../../../core/edit/selection/snapshot.ts";
 import type { SelectionEditResult } from "../../../../../../core/edit/selection/edits.ts";
 
-import type { Timeline } from "../../timeline/surface/timeline.ts";
+import {
+  forwardBallPointer,
+  routePendingPlacement,
+  type BatchTimeline,
+} from "./batchControlTimeline.ts";
 import { previewSession } from "./previewSession.ts";
 import {
   batchDragDeltas,
@@ -104,35 +108,6 @@ export function hasVisibleBatchSelection(area: TimelineArea, session: EditorSess
     session.eventSelection.size === 0
   );
 }
-
-type BatchTimeline = Pick<
-  Timeline,
-  "notesCanvas" | "eventsCanvas" | "cancelPlacement" | "changed" | "setPreview"
-> & {
-  viewport: Pick<
-    Timeline["viewport"],
-    | "panelWidth"
-    | "panelIndex"
-    | "panelStride"
-    | "multiLineViewportOffset"
-    | "point"
-    | "tempo"
-    | "origin"
-    | "judgementOffset"
-    | "scale"
-    | "scaleForArea"
-    | "notePositionAt"
-    | "division"
-    | "factorForLine"
-    | "noteInset"
-    | "snapX"
-    | "gridCount"
-  >;
-  gestures: Pick<
-    Timeline["gestures"],
-    "cursor" | "eventCursor" | "clipboardPointer" | "scaleAxis" | "scaleAxisLine" | "preview"
-  >;
-};
 
 /** A canvas-space point with the minimum surface required by callers. */
 interface Point {
@@ -308,6 +283,16 @@ export class BatchControls {
       },
       true,
     );
+    scope.listen(
+      document,
+      "pointermove",
+      (event: Event) => {
+        if (!this.active) {
+          forwardBallPointer(this.timeline, event as PointerEvent);
+        }
+      },
+      true,
+    );
     // Escape and the 1/2 scale anchors belong to the live drag, not the
     // shortcut table: they only exist while a pointer gesture owns the stage.
     scope.listen(
@@ -355,6 +340,21 @@ export class BatchControls {
         this.timeline.viewport.panelStride(width, area) -
       this.timeline.viewport.multiLineViewportOffset(width, area);
     return { left, right: left + panelWidth, width: panelWidth };
+  }
+
+  /**
+   * Include panel sizing in a dock's structural key, but leave viewport pan out.
+   * A width change changes the panel-relative placement rule; pan should instead
+   * preserve the existing content anchor and be handled by `dockFollow()`.
+   */
+  dockSignature(
+    area: TimelineArea,
+    session: EditorSession,
+    canvas: HTMLCanvasElement,
+    rectangle: { width: number; height: number },
+  ): string {
+    const width = canvas.clientWidth;
+    return `${this.signature(area, session)}:${rectangle.width}:${rectangle.height}:${this.timeline.viewport.panelWidth(width, area)}:${this.timeline.viewport.panelStride(width, area)}`;
   }
 
   clampPoint(point: Point, bounds: Bounds, canvas: HTMLCanvasElement): Point {
@@ -413,7 +413,7 @@ export class BatchControls {
         height: canvas.clientHeight,
       };
       const boundsOf = (lineIndex: number) => this.panelBounds(area, lineIndex, canvas);
-      const signature = `${this.signature(area, session)}:${rectangle.width}:${rectangle.height}`;
+      const signature = this.dockSignature(area, session, canvas, rectangle);
       let placed: { anchor: DockAnchor; x: number; y: number } | null = null;
       if (signature !== group.signature) {
         group.signature = signature;
@@ -431,7 +431,7 @@ export class BatchControls {
         placed = dockPlacement(input, {
           bounds: selectionPanelBounds(area, snapshot, boundsOf),
           point: point ?? null,
-          factor: this.timeline.viewport.factorForLine?.(session.lineIndex) ?? 1,
+          factor: 1,
         });
         group.anchor = placed.anchor;
       }
@@ -478,6 +478,9 @@ export class BatchControls {
     if (event.button !== 0 || this.active || !this.enabled()) {
       return;
     }
+    if (routePendingPlacement(this.timeline, area, event)) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     this.cancelledPointerCapture = null;
@@ -487,24 +490,10 @@ export class BatchControls {
     const session = this.getSession();
     const snapshot = captureSelection(session);
     const selectedEntries = area === "notes" ? snapshot.notes : snapshot.events;
-    const multiMode =
-      session.multiLineActive &&
-      ((area === "notes" && session.multiLineMode === "notes") ||
-        (area === "events" && session.multiLineMode === "events"));
-    const multiIntent = session.multiSelectionIntent === area;
-    // Event balls are the only way to move or resize an event, so one selected
-    // event is enough. Notes keep their batch threshold.
-    const minimumEntries =
-      area === "events"
-        ? 1
-        : multiMode
-          ? multiIntent
-            ? 1
-            : Number.POSITIVE_INFINITY
-          : multiIntent
-            ? 1
-            : 2;
-    if (selectedEntries.length < minimumEntries) {
+    // The dock is a batch-edit affordance for both notes and events. Keep the
+    // pointer path consistent with its visibility rule: one selected object has
+    // no valid batch drag, even when the event balls can edit that object.
+    if (selectedEntries.length < 2) {
       return;
     }
     if (area === "notes") {
@@ -542,7 +531,9 @@ export class BatchControls {
       point,
       canvas,
       unit: Math.max(0.35, canvas.clientHeight / 1080),
-      factor: session.chart.judgeLineList?.[activeLineIndex]?.bpmfactor ?? 1,
+      // Batch controls always use the chart's global time grid. Per-line BPM
+      // factors do not change their vertical drag or dock projection.
+      factor: 1,
       startBeat: this.timeline.viewport.tempo.beat(
         this.timeline.viewport.tempo.seconds(this.timeline.viewport.origin) +
           (canvas.clientHeight - (this.timeline.viewport.judgementOffset ?? 42) - point.y) /
@@ -623,13 +614,13 @@ export class BatchControls {
       scale: this.timeline.viewport.scaleForArea(active.area),
       judgementOffset: this.timeline.viewport.judgementOffset ?? 42,
       division: this.timeline.viewport.division,
+      snapY: this.timeline.viewport.snapY,
       height: active.canvas.clientHeight,
       start,
       point,
       factor,
       startBeat: active.startBeat,
-      factorForLine: (lineIndex) =>
-        this.timeline.viewport.factorForLine?.(lineIndex) ?? active.factor,
+      factorForLine: (lineIndex) => this.timeline.viewport.factorForLine?.(lineIndex) ?? 1,
       lineIndices: (active.area === "notes" ? snapshot.notes : snapshot.events).map(
         (entry: { lineIndex: number }) => entry.lineIndex,
       ),
@@ -730,7 +721,7 @@ export class BatchControls {
       return;
     }
     const rectangle = active.canvas.getBoundingClientRect();
-    group.signature = `${this.signature(active.area, this.getSession())}:${rectangle.width}:${rectangle.height}`;
+    group.signature = this.dockSignature(active.area, this.getSession(), active.canvas, rectangle);
     this.state.hints.set(active.area, "");
     const deltaX = active.point.x - active.start.x;
     const deltaY = active.point.y - active.start.y;

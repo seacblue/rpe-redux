@@ -44,7 +44,6 @@ export function createChartExport(
     throw new Error(t("system.files.exportNameRequired"));
   }
   const snapshot: Chart = { ...chart };
-  delete snapshot.chartTime;
   const result = createExportArtifact(
     {
       model: snapshot,

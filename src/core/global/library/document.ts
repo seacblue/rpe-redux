@@ -23,6 +23,7 @@ import type {
   LibraryProjectSummary,
   LocalLibrary,
 } from "./client.ts";
+import { parseChartEditSeconds } from "../chart/editTime.ts";
 
 /** A lazy asset map that remembers which content hash each name already has. */
 export interface LibraryAssetMap extends AssetMap {
@@ -228,6 +229,13 @@ export async function openLibraryChartDocument(
       maxCachedBytes: PAGED_DOCUMENT_MAX_BYTES,
     },
   );
+  if (parseChartEditSeconds(parsed.chartDocument.chart.chartTime) === null) {
+    const seconds = parseChartEditSeconds(project.editSeconds);
+    if (seconds !== null) {
+      parsed.chartDocument.chart.chartTime = seconds;
+      parsed.chartDocument.updateHeaderFromChart(parsed.chartDocument.chart);
+    }
+  }
   return {
     project,
     chartDocument: parsed.chartDocument,

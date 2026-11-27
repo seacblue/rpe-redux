@@ -135,11 +135,7 @@ export default {
   "chrome.sessionPrompt.star.title": "Do you like RPE Redux?",
   "chrome.sessionPrompt.star.description":
     "If RPE Redux is useful to you, would you like to give it a star on GitHub?",
-  "chrome.sessionPrompt.feedback.title": "Is there anything you want to complain about?",
-  "chrome.sessionPrompt.feedback.description":
-    "Tell us what is frustrating, confusing, or worth improving in RPE Redux.",
   "chrome.sessionPrompt.action.openGithub": "Go to GitHub",
-  "chrome.sessionPrompt.action.openSurvey": "Open the survey",
   "chrome.sessionPrompt.action.later": "Not now",
   "chrome.sessionPrompt.action.never": "Don't remind me",
   "chrome.sessionPrompt.openFailed.title": "Could not open the link",
@@ -249,6 +245,8 @@ export default {
   "chrome.toolbar.divisionHint": "Grid lines per beat",
   "chrome.toolbar.gridCount": "X-axis grid",
   "chrome.toolbar.gridCountHint": "Selectable note X lines",
+  "chrome.toolbar.gridCountSnap": "Toggle horizontal grid",
+  "chrome.toolbar.divisionSnap": "Toggle vertical grid",
 
   "chrome.toolbar.ratio": "Preview ratio",
   "chrome.toolbar.scrollbar": "Toolbar scroll position",

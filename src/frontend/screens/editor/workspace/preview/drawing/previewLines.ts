@@ -8,6 +8,7 @@ import { DEFAULT_LINE_HEIGHT, DEFAULT_LINE_WIDTH, previewNoteWidth } from "../sc
 import { noteSkewShear } from "../../../canvas/noteGeometry.ts";
 import { textureInViewport } from "./textureVisibility.ts";
 import { clamp01 } from "../../../../../../core/utils/numbers.ts";
+import { sourceOverColor } from "../../../../../../core/utils/colors.ts";
 import {
   noteColor,
   readCanvasPalette,
@@ -36,6 +37,8 @@ import type {
 import type { NoteBatch } from "../../../canvas/noteBatch.ts";
 import type { NoteTextureTable } from "../../../canvas/noteBatch.ts";
 import type { NoteColor } from "../../../canvas/noteSpriteGroups.ts";
+import { noteRenderLayer } from "../../../../../../core/global/chart/shader/renderLayers.ts";
+import { workspaceShaderPasses } from "../../../../../../core/global/chart/shader/workspacePasses.ts";
 
 /** Screen-space quad of a judge line, including its texture size and rotated corners. */
 function lineGeometry(
@@ -152,6 +155,10 @@ export function isPreviewNoteSelected(
 /** State read by line/note drawing and hit areas written during the frame. */
 export interface PreviewLineSurface extends PreviewTextureSurface {
   noteBatch: NoteBatch;
+  /** Temporary RGBA semantic layer atlas populated alongside visible notes. */
+  shaderMaskContext: CanvasRenderingContext2D | null;
+  /** Temporary note-field atlas populated alongside visible notes. */
+  shaderNoteFieldMaskContext: CanvasRenderingContext2D | null;
   /**
    * Note heads by `type * 2 + highlight`, refreshed by the owner when the paint begins.
    *
@@ -223,6 +230,177 @@ interface PreviewNoteScreenGeometry {
   tailY: number;
 }
 
+/** State needed to paint a mask with the same local transform as the note skin. */
+interface PreviewNoteMaskPaint {
+  horizontal: number;
+  position: NoteState;
+  noteWidth: number;
+  scaleY: number;
+  lineCenterX: number;
+  lineCenterY: number;
+  lineRotationRadians: number;
+  skewShear: number;
+  holdRotation: number;
+  invertedCapRotation: number | null;
+  holdCapScale: number;
+  invertedHold: boolean;
+  showHead: boolean;
+  highlight: boolean;
+  holdCompact: boolean;
+  holdRepeat: boolean;
+}
+
+/** Paint a note shape while preserving the active skin texture's alpha. */
+function paintPreviewMaskShape(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  color: NoteColor,
+  fallbackColor: string,
+  paint: PreviewNoteMaskPaint,
+): void {
+  context.save();
+  context.globalCompositeOperation = "lighter";
+  context.fillStyle = fallbackColor;
+  context.strokeStyle = fallbackColor;
+  context.translate(paint.lineCenterX, paint.lineCenterY);
+  context.rotate(paint.lineRotationRadians);
+  let drawnBySkin: boolean;
+  if (entry.note.type === 2) {
+    drawnBySkin =
+      surface.skin?.hold(
+        context,
+        paint.horizontal,
+        -paint.position.y * paint.scaleY,
+        -paint.position.tail * paint.scaleY,
+        paint.noteWidth,
+        paint.highlight,
+        paint.showHead,
+        color,
+        paint.invertedCapRotation ?? paint.holdRotation,
+        paint.holdCapScale,
+        !paint.invertedHold,
+        paint.holdCompact,
+        paint.holdRepeat,
+      ) ?? false;
+  } else {
+    context.save();
+    context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+    context.transform(1, 0, paint.skewShear, 1, 0, 0);
+    drawnBySkin =
+      surface.skin?.head(context, entry.note.type, 0, 0, paint.noteWidth, paint.highlight, color) ??
+      false;
+    context.restore();
+  }
+  if (!drawnBySkin && entry.note.type === 2) {
+    if (paint.invertedHold) {
+      context.fillRect(
+        paint.horizontal - paint.noteWidth / 2,
+        -paint.position.tail * paint.scaleY - 2,
+        paint.noteWidth,
+        4,
+      );
+    } else {
+      context.fillRect(
+        paint.horizontal - paint.noteWidth / 2,
+        -paint.position.tail * paint.scaleY,
+        paint.noteWidth,
+        (paint.position.tail - paint.position.y) * paint.scaleY,
+      );
+    }
+    if (paint.showHead) {
+      context.save();
+      context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+      context.transform(1, 0, paint.skewShear, 1, 0, 0);
+      if (
+        !surface.skin?.head(context, entry.note.type, 0, 0, paint.noteWidth, paint.highlight, color)
+      ) {
+        context.fillRect(-paint.noteWidth / 2, -2, paint.noteWidth, 4);
+      }
+      context.restore();
+    }
+  } else if (!drawnBySkin) {
+    context.save();
+    context.translate(paint.horizontal, -paint.position.y * paint.scaleY);
+    context.transform(1, 0, paint.skewShear, 1, 0, 0);
+    context.fillRect(-paint.noteWidth / 2, -2, paint.noteWidth, 4);
+    context.restore();
+  }
+  context.restore();
+}
+
+/** Paint one note's semantic layer into the RGBA mask atlas. */
+function paintPreviewNoteMask(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  paint: PreviewNoteMaskPaint,
+): void {
+  const layer = noteRenderLayer(entry.note.type);
+  if (!layer) {
+    return;
+  }
+  const channels =
+    layer === "chart.note.hold"
+      ? [255, 0, 0]
+      : layer === "chart.note.drag"
+        ? [0, 255, 0]
+        : layer === "chart.note.tap"
+          ? [0, 0, 255]
+          : [0, 0, 0];
+  paintPreviewMaskShape(
+    context,
+    surface,
+    entry,
+    { mode: "selected", color: channels },
+    `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, 1)`,
+    paint,
+  );
+}
+
+/** Return an opaque RGBA fill for a note-field mask atlas pixel. */
+export function previewNoteFieldMaskColor(channels: readonly number[]): string {
+  return `rgba(${channels[0] ?? 0}, ${channels[1] ?? 0}, ${channels[2] ?? 0}, 1)`;
+}
+
+/** Paint the currently requested note-field selector into the field atlas. */
+function paintPreviewNoteFieldMask(
+  context: CanvasRenderingContext2D,
+  surface: PreviewLineSurface,
+  entry: NoteEntry,
+  paint: PreviewNoteMaskPaint,
+): void {
+  const note = entry.note as Record<string, unknown>;
+  const bindings = workspaceShaderPasses
+    .active()
+    .map((pass) => pass.mask)
+    .filter(
+      (mask) =>
+        mask?.atlas === "note-fields" &&
+        mask.field !== undefined &&
+        String(note[mask.field]) === String(mask.value),
+    );
+  if (!bindings.length) {
+    return;
+  }
+  const channels = [0, 0, 0, 0];
+  for (const binding of bindings) {
+    for (let channel = 0; channel < channels.length; channel += 1) {
+      if ((binding?.selection[channel] ?? 0) > 0.001) {
+        channels[channel] = 255;
+      }
+    }
+  }
+  paintPreviewMaskShape(
+    context,
+    surface,
+    entry,
+    { mode: "selected", color: channels.slice(0, 3) },
+    previewNoteFieldMaskColor(channels),
+    paint,
+  );
+}
+
 /** Resolve the screen coordinates shared by note rendering, culling, and picking. */
 function previewNoteScreenGeometry(
   target: PreviewNoteScreenGeometry,
@@ -236,18 +414,21 @@ function previewNoteScreenGeometry(
   sine: number,
 ): PreviewNoteScreenGeometry {
   const horizontal = position.x * scaleX;
-  const worldX = state.x + position.x * cosine + position.y * sine;
-  const worldY = -state.y + position.x * sine - position.y * cosine;
-  const headX = centerX + worldX * scaleX;
-  const headY = centerY + worldY * scaleY;
+  // Apply the viewport mapping in the line's local axes before rotating. The
+  // judge line is painted with that same local transform; scaling the rotated
+  // coordinates instead (`S * R`) moves a note off a tilted line whenever the
+  // frame is not square to the 1350×900 authoring box.
+  const localX = position.x * scaleX;
+  const localY = position.y * scaleY;
+  const headX = centerX + state.x * scaleX + localX * cosine + localY * sine;
+  const headY = centerY - state.y * scaleY + localX * sine - localY * cosine;
   const tail = Number.isFinite(position.tail) ? position.tail : position.y;
-  const tailWorldX = state.x + position.x * cosine + tail * sine;
-  const tailWorldY = -state.y + position.x * sine - tail * cosine;
+  const tailLocalY = tail * scaleY;
   target.horizontal = horizontal;
   target.headX = headX;
   target.headY = headY;
-  target.tailX = centerX + tailWorldX * scaleX;
-  target.tailY = centerY + tailWorldY * scaleY;
+  target.tailX = centerX + state.x * scaleX + localX * cosine + tailLocalY * sine;
+  target.tailY = centerY - state.y * scaleY + localX * sine - tailLocalY * cosine;
   return target;
 }
 
@@ -345,6 +526,7 @@ function previewNoteTintInto(
   target.color[0] = tint[0] ?? 255;
   target.color[1] = tint[1] ?? 255;
   target.color[2] = tint[2] ?? 255;
+  target.color[3] = tint[3] ?? 1;
   return target;
 }
 
@@ -414,6 +596,30 @@ function drawPreviewNoteEntry(
   const noteColorStyle = previewNoteTintInto(tintTarget, entry.note, selected, selectionTint);
   const noteAlpha = holdFallbackAlpha(position.alpha, noteOpacity);
   const skewShear = noteSkewShear(position.skew);
+  const maskPaint: PreviewNoteMaskPaint = {
+    horizontal: geometry.horizontal,
+    position,
+    noteWidth,
+    scaleY,
+    lineCenterX,
+    lineCenterY,
+    lineRotationRadians,
+    skewShear,
+    holdRotation,
+    invertedCapRotation,
+    holdCapScale,
+    invertedHold,
+    showHead,
+    highlight,
+    holdCompact,
+    holdRepeat,
+  };
+  if (surface.shaderMaskContext) {
+    paintPreviewNoteMask(surface.shaderMaskContext, surface, entry, maskPaint);
+  }
+  if (surface.shaderNoteFieldMaskContext) {
+    paintPreviewNoteFieldMask(surface.shaderNoteFieldMaskContext, surface, entry, maskPaint);
+  }
   const batchAdded = isHold
     ? surface.noteBatch.addHold(
         surface.skin ?? null,
@@ -513,9 +719,9 @@ function paintPreviewNoteFallback(
   context.globalAlpha = alpha;
   const tint = noteColorStyle?.color;
   context.fillStyle = selected
-    ? palette.selectionHighlightStroke
+    ? sourceOverColor(noteColor(palette, noteType), palette.selectionHighlightStroke)
     : Array.isArray(tint)
-      ? `rgb(${tint.join(",")})`
+      ? `rgb(${tint.slice(0, 3).join(",")})`
       : noteColor(palette, noteType);
   let drawnHold = false;
   if (noteType === 2) {
@@ -718,7 +924,7 @@ export function drawLinePasses(
   };
   // One tint holder for the whole pass: a dense frame would otherwise allocate a style
   // object and a colour array per visible note.
-  const noteTint: TintTarget = { mode: "tint", color: [255, 255, 255] };
+  const noteTint: TintTarget = { mode: "tint", color: [255, 255, 255, 1] };
   const selectionTint = selectionHighlightColor(palette);
   surface.noteHitAreas.length = 0;
   surface.lineFrames.length = 0;

@@ -34,6 +34,8 @@ interface TimelineNavigationDependencies {
   lineSwitcher: Pick<LineSwitcher, "step">;
   /** Returns true when the event changed timeline state and needs a repaint. */
   zoomVertical?: (event: WheelEvent, direction: -1 | 1) => boolean;
+  /** Scrolls the active multi-line panel set, or returns false when unavailable. */
+  multiLineScroll?: (event: WheelEvent, direction: -1 | 1) => boolean;
 }
 
 /** A detent-sized pixel delta counts as one notch even when a device reports 37. */
@@ -55,6 +57,7 @@ export function bindTimelineNavigation({
   wheelSettings,
   lineSwitcher,
   zoomVertical,
+  multiLineScroll,
 }: TimelineNavigationDependencies): {
   wheel(event: WheelEvent): boolean;
 } {
@@ -129,6 +132,10 @@ export function bindTimelineNavigation({
     if (action?.kind === "zoom") {
       resetTrackpad();
       return zoomVertical?.(event, action.direction) ?? false;
+    }
+    if (action?.kind === "multiLineScroll") {
+      resetTrackpad();
+      return multiLineScroll?.(event, action.direction) ?? false;
     }
     if (action?.kind === "line") {
       resetTrackpad();

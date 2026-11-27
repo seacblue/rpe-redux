@@ -48,6 +48,8 @@ export interface LibrarySaveInput {
   assets: AssetMap;
   viewState?: LibraryViewState;
   assetFolders?: readonly string[];
+  /** Active editing seconds represented by this commit; added to the project total. */
+  editSeconds?: number;
   /** Create a new project for this save and leave the source project unchanged. */
   duplicate?: boolean;
   /** Project name for the copy; defaults to `name`. */
@@ -98,8 +100,12 @@ async function prepareLibraryAssets(input: LibrarySaveInput): Promise<AssetMap> 
     if (!hasThumbnail) {
       return assets;
     }
-    assets.delete(LIBRARY_THUMBNAIL_ASSET);
-    return saveAssetSnapshot(assets);
+    const snapshot = saveAssetSnapshot(assets);
+    const snapshotNames = new Set(assetNames(snapshot));
+    snapshot.delete(LIBRARY_THUMBNAIL_ASSET);
+    snapshotNames.delete(LIBRARY_THUMBNAIL_ASSET);
+    snapshot.names = () => snapshotNames;
+    return snapshot;
   }
   const bytes = assets.get(background) ?? (await assets.read?.(background)) ?? null;
   if (!bytes) {
@@ -119,8 +125,8 @@ async function prepareLibraryAssets(input: LibrarySaveInput): Promise<AssetMap> 
   if (!thumbnail) {
     return assets;
   }
-  assets.set(LIBRARY_THUMBNAIL_ASSET, thumbnail);
   const snapshot = saveAssetSnapshot(assets);
+  snapshot.set(LIBRARY_THUMBNAIL_ASSET, thumbnail);
   const snapshotNames = new Set(assetNames(snapshot));
   snapshotNames.add(LIBRARY_THUMBNAIL_ASSET);
   snapshot.names = () => snapshotNames;
@@ -191,6 +197,9 @@ export async function saveLibraryDocument(input: LibrarySaveInput): Promise<Libr
       assets: manifest,
       ...(input.viewState ? { viewState: input.viewState } : {}),
       ...(input.assetFolders ? { assetFolders: input.assetFolders } : {}),
+      ...(input.editSeconds !== undefined
+        ? { editSeconds: Math.max(0, Math.floor(input.editSeconds)) }
+        : {}),
     };
     const result = input.chartChunks
       ? await input.library.commitStream(

@@ -1,6 +1,6 @@
 # Persistence
 
-Extensions have separate storage surfaces for package-private settings, JSON data, and user-visible Settings rows. Choose the narrowest surface that matches the data.
+Extensions have separate storage surfaces for package-private settings, JSON data, and user-visible Settings rows. Choose the narrowest surface that matches the data. Chart-side projections are a different boundary; use the generated `persistence` API pages instead of putting chart data in package storage.
 
 ## Purpose
 
@@ -36,4 +36,4 @@ Handle quota, malformed JSON, unavailable storage, and permission errors as sepa
 
 ## Related APIs
 
-See `context.storage.getJSON`, `context.storage.setJSON`, `context.api.values.define`, and [Types](types.md).
+See `context.storage.getJSON`, `context.storage.setJSON`, `context.api.values.define`, the generated `persistence` API pages, and [Types](types.md).

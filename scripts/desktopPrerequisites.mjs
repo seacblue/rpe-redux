@@ -9,8 +9,9 @@ import { runBuildPrerequisites } from "./buildPrerequisites.mjs";
 /**
  * Scripts that run before Tauri starts.
  *
- * The Go sidecar is always built; the pinned FFmpeg and Cloudflare Tunnel
- * downloads are skipped when the caller asked for a build without them.
+ * The Go sidecar is always built; local helper staging never performs a latest
+ * lookup, while release CI opts into the latest FFmpeg and Cloudflare Tunnel
+ * downloads through REDUX_RELEASE_BUILD.
  */
 export function desktopPrerequisiteScripts(root, { bundledTools = true } = {}) {
   const scripts = [];

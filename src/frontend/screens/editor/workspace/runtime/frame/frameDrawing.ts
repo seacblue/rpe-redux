@@ -60,7 +60,10 @@ function reportFrameTiming(sample: Parameters<FrameTimingProbe>[0]): void {
   }
 }
 
-type FrameTimeline = Pick<Timeline, "draw" | "getSession" | "getPreviewSession" | "notesCanvas"> & {
+type FrameTimeline = Pick<
+  Timeline,
+  "draw" | "getSession" | "getPreviewSession" | "getPreviewChart" | "notesCanvas"
+> & {
   renderRevision: number;
   selectionOverlayRevision: number;
   drawPlayhead(playBeat: number): void;
@@ -151,10 +154,9 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.batchControls.sync();
       }
       const beat = tempo.beat(frameSeconds);
-      session.editSeconds = Math.max(0, frameSeconds);
-      if (refreshHud) {
-        runtime.updateLineInfo();
-      }
+      // The line-info overlay is a frame readout: its delta is defined by the
+      // previous rendered frame, so it must refresh on every painted frame.
+      runtime.updateLineInfo();
       updatePlaybackViewportOrigin(
         runtime.timeline.viewport,
         beat,
@@ -185,9 +187,11 @@ export function createFrameDrawing(runtime: FrameDrawingOptions) {
         runtime.realtimePreview,
       );
       const cameraPreview = freeCameraState.get().active;
-      // Multi-edit ghosts belong to the timeline only; realtime preview always
-      // samples the live chart (or another explicitly owned preview session).
-      const viewChart = trajectoryView?.chart ?? viewSession.chart;
+      // Batch multi-edit ghosts stay on the timeline; direct note drags publish a
+      // chart-only proposal so the realtime preview can follow without replacing
+      // the live session.
+      const viewChart =
+        trajectoryView?.chart ?? runtime.timeline.getPreviewChart() ?? viewSession.chart;
       const viewSeconds = trajectoryView?.seconds ?? frameSeconds;
       const previewChartChanged = viewChart !== previousPreviewChart;
       const previewSession = runtime.timeline.getPreviewSession();

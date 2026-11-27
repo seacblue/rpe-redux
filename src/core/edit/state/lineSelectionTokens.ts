@@ -310,8 +310,8 @@ export function subtractLineSelection(
 /**
  * Add a block after removing its lines from the existing tokens.
  *
- * The new block is appended as one compact list, so repeated block additions
- * always land at the end while the earlier tokens keep their order.
+ * The new block is inserted by its first line, so overlapping block additions
+ * keep the written expression in list order while preserving token boundaries.
  */
 export function addLineSelection(
   tokens: readonly LineSelectionToken[],
@@ -323,7 +323,19 @@ export function addLineSelection(
   if (!values.length) {
     return [...tokens];
   }
-  return [...subtractLineSelection(tokens, values, available, groups), ...tokensFromLines(values)];
+  const known = availableSetOf(available);
+  const combined = [
+    ...subtractLineSelection(tokens, values, known, groups),
+    ...tokensFromLines(values),
+  ];
+  return combined
+    .map((token, index) => ({
+      token,
+      index,
+      firstLine: resolveToken(token, known, groups)[0] ?? Number.POSITIVE_INFINITY,
+    }))
+    .sort((left, right) => left.firstLine - right.firstLine || left.index - right.index)
+    .map(({ token }) => token);
 }
 
 /**

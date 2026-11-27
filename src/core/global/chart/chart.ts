@@ -280,6 +280,8 @@ export interface BpmEntry {
 export interface Chart {
   META: ChartMeta;
   BPMList: BpmEntry[];
+  /** Total active editing time carried by native RPE charts, in seconds. */
+  chartTime?: number;
   judgeLineGroup?: string[];
   /** RPE-compatible persisted line expression used by multi-line editing; `all` selects every line. */
   multiLineString?: string;

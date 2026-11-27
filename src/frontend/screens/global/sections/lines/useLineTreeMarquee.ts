@@ -1,26 +1,31 @@
 /**
- * Shift-drag marquee selection for the judge-line tree.
+ * Windows-style pointer selection for the judge-line tree.
  *
- * The rectangle unions every intersecting row with the selection captured at
- * pointerdown, so a drag adds to an existing multi-selection. Releasing without
- * movement falls back to a Shift-click toggle. Window listeners are installed
- * for one gesture and removed on release, cancel, blur, or unmount.
+ * A plain drag replaces the captured selection, Ctrl/Cmd adds or removes the
+ * rows inside the rectangle, and Shift adds them. A click is handed back to
+ * the tree's common click rule so the same focus/range semantics apply to
+ * both a click and a drag.
  */
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent,
   type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
 import type { JudgeLine } from "../../../../../core/global/chart/chart.ts";
+import {
+  listSelectionAfterMarquee,
+  type ListSelectionModifiers,
+} from "../../../../../design/patterns/list/listSelection.ts";
 import { lineTreeKey } from "./lineTreeModel.ts";
+import { resolveLineTreeMarqueeFocus, topmostLineInSelection } from "./lineTreeSelection.ts";
 
 const MARQUEE_THRESHOLD = 4;
 
-/** The visible selection rectangle plus the row keys it covers. */
+/** The visible selection rectangle plus the selection it previews. */
 export interface MarqueeBox {
   left: number;
   top: number;
@@ -37,6 +42,9 @@ interface MarqueeGesture {
   startKey: string | null;
   initial: Set<string>;
   hits: Set<string>;
+  firstLine: string | null;
+  focusLine: string | null;
+  modifiers: ListSelectionModifiers;
   moved: boolean;
 }
 
@@ -46,10 +54,13 @@ interface MarqueeOptions {
   lines: readonly JudgeLine[];
   selectedIds: ReadonlySet<string>;
   lineIndices: ReadonlyMap<string, number>;
-  focusAfterRemoval(removed: number, next: ReadonlySet<string>): number;
+  order: readonly string[];
   currentScroll(): number;
   onSelectionChange(ids: ReadonlySet<string>): void;
+  onSelectionFirstLineChange?(index: number): void;
+  onSelectionFocusChange?(index: number): void;
   onSelectLine(index: number, scrollTop: number): void;
+  onClick(index: number, modifiers: ListSelectionModifiers): void;
 }
 
 /** Marquee state and the pointerdown entry point for the tree surface. */
@@ -59,10 +70,13 @@ export function useLineTreeMarquee({
   lines,
   selectedIds,
   lineIndices,
-  focusAfterRemoval,
+  order,
   currentScroll,
   onSelectionChange,
+  onSelectionFirstLineChange,
+  onSelectionFocusChange,
   onSelectLine,
+  onClick,
 }: MarqueeOptions) {
   const [marquee, setMarquee] = useState<MarqueeBox | null>(null);
   const marqueeRef = useRef<MarqueeGesture | null>(null);
@@ -73,10 +87,13 @@ export function useLineTreeMarquee({
     lines,
     selectedIds,
     lineIndices,
-    focusAfterRemoval,
+    order,
     currentScroll,
     onSelectionChange,
+    onSelectionFirstLineChange,
+    onSelectionFocusChange,
     onSelectLine,
+    onClick,
   });
   useEffect(() => {
     optionsRef.current = {
@@ -85,10 +102,13 @@ export function useLineTreeMarquee({
       lines,
       selectedIds,
       lineIndices,
-      focusAfterRemoval,
+      order,
       currentScroll,
       onSelectionChange,
+      onSelectionFirstLineChange,
+      onSelectionFocusChange,
       onSelectLine,
+      onClick,
     };
   }, [
     listRef,
@@ -96,10 +116,13 @@ export function useLineTreeMarquee({
     lines,
     selectedIds,
     lineIndices,
-    focusAfterRemoval,
+    order,
     currentScroll,
     onSelectionChange,
+    onSelectionFirstLineChange,
+    onSelectionFocusChange,
     onSelectLine,
+    onClick,
   ]);
 
   useEffect(
@@ -111,15 +134,26 @@ export function useLineTreeMarquee({
 
   const beginMarquee = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     const currentOptions = optionsRef.current;
-    if (event.button !== 0 || !event.shiftKey) {
+    if (event.button !== 0) {
       return;
     }
-    const startIndex = Number(event.currentTarget.dataset.lineIndex);
+    const targetRow =
+      event.currentTarget.dataset.lineIndex !== undefined
+        ? event.currentTarget
+        : event.target instanceof HTMLElement
+          ? event.target.closest<HTMLElement>("[data-line-index]")
+          : null;
+    const startIndex = Number(targetRow?.dataset.lineIndex);
     const startKey =
       Number.isInteger(startIndex) && startIndex >= 0 && startIndex < currentOptions.lines.length
         ? lineTreeKey(currentOptions.lines, startIndex)
         : null;
     event.preventDefault();
+    const modifiers: ListSelectionModifiers = {
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+    };
     const gesture: MarqueeGesture = {
       startX: event.clientX,
       startY: event.clientY,
@@ -128,6 +162,9 @@ export function useLineTreeMarquee({
       startKey,
       initial: new Set(currentOptions.selectedIds),
       hits: new Set(currentOptions.selectedIds),
+      firstLine: startKey,
+      focusLine: startKey,
+      modifiers,
       moved: false,
     };
     marqueeRef.current = gesture;
@@ -160,7 +197,7 @@ export function useLineTreeMarquee({
       const top = Math.min(current.startY, current.currentY);
       const right = Math.max(current.startX, current.currentX);
       const bottom = Math.max(current.startY, current.currentY);
-      const hits = new Set(current.initial);
+      const touched: string[] = [];
       if (currentOptions.listRef.current) {
         for (const node of currentOptions.rowRefs.current.values()) {
           if (!node.isConnected || node.hidden) {
@@ -174,16 +211,30 @@ export function useLineTreeMarquee({
           if (box.bottom < top || box.top > bottom || box.right < left || box.left > right) {
             continue;
           }
-          hits.add(lineTreeKey(currentOptions.lines, index));
+          touched.push(lineTreeKey(currentOptions.lines, index));
         }
       }
-      current.hits = hits;
-      setMarquee({ left, top, width: right - left, height: bottom - top, hits });
+      current.firstLine =
+        topmostLineInSelection(currentOptions.order, touched) ?? current.firstLine;
+      const preview = listSelectionAfterMarquee(
+        currentOptions.order,
+        current.initial,
+        touched,
+        current.modifiers,
+        true,
+      );
+      current.hits = new Set(preview.selection);
+      current.focusLine =
+        resolveLineTreeMarqueeFocus(
+          currentOptions.order,
+          current.initial,
+          touched,
+          current.modifiers,
+        ) ?? preview.focus;
+      setMarquee({ left, top, width: right - left, height: bottom - top, hits: current.hits });
     };
 
     const blockNextClick = () => {
-      // Browser click dispatch follows pointerup and would otherwise re-run the
-      // row's own click handler over the selection this gesture just made.
       const blockClick = (click: MouseEvent) => {
         click.preventDefault();
         click.stopImmediatePropagation();
@@ -201,54 +252,40 @@ export function useLineTreeMarquee({
       if (!current) {
         return;
       }
+      blockNextClick();
+      const latest = optionsRef.current;
       if (!current.moved) {
-        if (!current.startKey) {
-          return;
+        const index = current.startKey ? latest.lineIndices.get(current.startKey) : undefined;
+        if (index !== undefined) {
+          latest.onClick(index, current.modifiers);
         }
-        blockNextClick();
-        const index = optionsRef.current.lineIndices.get(current.startKey);
-        if (index === undefined) {
-          return;
-        }
-        const next = new Set(current.initial);
-        if (next.has(current.startKey)) {
-          if (next.size > 1) {
-            next.delete(current.startKey);
-          }
-        } else {
-          next.add(current.startKey);
-        }
-        if (!next.size) {
-          next.add(current.startKey);
-        }
-        const latest = optionsRef.current;
-        const focusIndex = next.has(current.startKey)
-          ? index
-          : latest.focusAfterRemoval(index, next);
-        latest.onSelectionChange(next);
-        latest.onSelectLine(focusIndex, latest.currentScroll());
         return;
       }
-      blockNextClick();
       const changed =
         current.hits.size !== current.initial.size ||
         [...current.hits].some((id) => !current.initial.has(id));
-      if (!changed) {
+      if (!changed && !current.modifiers.shiftKey) {
         return;
       }
-      const hitIndices = [...current.hits]
-        .flatMap((id) => {
-          const index = optionsRef.current.lineIndices.get(id);
-          return index === undefined ? [] : [index];
-        })
-        .sort((left, right) => left - right);
-      if (!hitIndices.length) {
+      if (current.modifiers.shiftKey && !current.firstLine) {
         return;
       }
-      const focus = hitIndices[0];
-      const latest = optionsRef.current;
-      latest.onSelectionChange(new Set(current.hits));
-      latest.onSelectLine(focus, latest.currentScroll());
+      const focusId = current.focusLine ?? [...current.hits][0];
+      const focusIndex = focusId === undefined ? undefined : latest.lineIndices.get(focusId);
+      if (focusIndex === undefined) {
+        return;
+      }
+      if (changed) {
+        latest.onSelectionChange(new Set(current.hits));
+      }
+      const firstLineIndex = current.firstLine
+        ? latest.lineIndices.get(current.firstLine)
+        : focusIndex;
+      latest.onSelectionFirstLineChange?.(firstLineIndex ?? focusIndex);
+      if (current.modifiers.shiftKey) {
+        latest.onSelectionFocusChange?.(focusIndex);
+        latest.onSelectLine(focusIndex, latest.currentScroll());
+      }
     };
 
     const cancel = () => {

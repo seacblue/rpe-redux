@@ -4,6 +4,53 @@ import test from "node:test";
 import { EditorSession } from "../../../core/edit/session/session.ts";
 import { createChart, createNote } from "../../../core/global/chart/chart.ts";
 import { BatchControls } from "../../../frontend/screens/editor/workspace/stage/batchControls/batchControls.ts";
+import {
+  dockSelectionCounts,
+  dockVisible,
+} from "../../../frontend/screens/editor/workspace/stage/batchControls/batchControlDock.ts";
+
+test("control balls are reserved for multi-selection", () => {
+  const single = {
+    selection: 1,
+    multiSelection: 0,
+    multiMode: false,
+    multiIntent: false,
+    notesMultiLine: false,
+  };
+  assert.equal(dockVisible("notes", single), false);
+  assert.equal(dockVisible("events", single), false);
+
+  const multi = { ...single, selection: 2 };
+  assert.equal(dockVisible("notes", multi), true);
+  assert.equal(dockVisible("events", multi), true);
+});
+
+test("a single multi-line object does not open batch controls", () => {
+  const singleMultiLine = {
+    selection: 1,
+    multiSelection: 1,
+    multiMode: true,
+    multiIntent: true,
+    notesMultiLine: false,
+  };
+  assert.equal(dockVisible("notes", singleMultiLine), false);
+  assert.equal(dockVisible("events", singleMultiLine), false);
+});
+
+test("a retained multi-line map does not inflate an ordinary selection", () => {
+  const counts = dockSelectionCounts("notes", {
+    multiLineSelection: new Map([[0, new Set([0])]]),
+    multiEventSelection: new Map(),
+    multiLineActive: false,
+    multiLineMode: "notes",
+    multiSelectionIntent: "notes",
+    selection: new Set([1]),
+    eventSelection: new Set(),
+  });
+
+  assert.equal(counts.selection, 1);
+  assert.equal(dockVisible("notes", { ...counts, notesMultiLine: false }), false);
+});
 
 /** Build the smallest controller state needed to exercise one pointer update. */
 function controllerForDrag() {
@@ -43,7 +90,9 @@ function controllerForDrag() {
       scaleForArea: () => 1,
       judgementOffset: 42,
       division: 1,
+      snapY: true,
       panelWidth: () => 100,
+      panelStride: () => 100,
       noteInset: () => 0,
       factorForLine: () => 1,
       snapX: false,
@@ -125,6 +174,7 @@ test("multi-line note drags convert time with the active area scale", () => {
       scaleForArea: () => 2,
       judgementOffset: 42,
       division: 1,
+      snapY: true,
       panelWidth: () => 100,
       noteInset: () => 0,
       factorForLine: () => 1,
@@ -218,6 +268,7 @@ function dockedController() {
     scaleForArea: () => 1,
     judgementOffset: 42,
     division: 4,
+    snapY: true,
     panelWidth: () => 200,
     panelIndex: () => 0,
     panelStride: () => 200,
@@ -298,6 +349,22 @@ test("a docked control ball follows a multi-line horizontal pan", () => {
   assert.equal(group.dockX, 120, "the ball follows the panned panel");
   assert.equal(group.dockY, 70, "panning does not move the dock vertically");
   assert.equal(element.style.transform, "translate3d(130px, 90px, 0)");
+});
+
+test("a multi-line panel resize refreshes the dock's horizontal anchor", () => {
+  const { controller, viewport, group } = dockedController();
+
+  controller.sync();
+  assert.equal(group.dockX, 150);
+
+  // The panel is resized by the multi-line window-width setting. The dock must
+  // use the new panel bounds instead of carrying its old pixel offset outside it.
+  viewport.panelWidth = () => 120;
+  viewport.panelStride = () => 120;
+  controller.sync();
+
+  assert.equal(group.dockX, 94);
+  assert.equal(group.bounds.width, 120);
 });
 
 test("a docked control ball follows a vertical zoom", () => {

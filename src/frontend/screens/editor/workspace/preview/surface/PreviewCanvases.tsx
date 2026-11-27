@@ -46,7 +46,7 @@ const developerAvailableNow = (): boolean => developerMode.get() || isDeveloperR
  */
 export function PreviewCanvases() {
   const { attach } = usePreviewSurface();
-  const { canvas, noteBatch, shader, overlay } = attach;
+  const { canvas, noteBatch, shader, mask, noteFieldMask, overlay } = attach;
   const runtime = usePreviewRuntime();
   const enabled = useSyncExternalStore(
     editorRealtimePreviewEnabled.subscribe,
@@ -106,6 +106,8 @@ export function PreviewCanvases() {
           the node mounted lets the editor preview use the same compositing
           surface as the dedicated preview and recording paths. */}
       <canvas ref={shader} className="preview-shader-layer" aria-hidden="true" />
+      <canvas ref={mask} className="preview-shader-mask" aria-hidden="true" />
+      <canvas ref={noteFieldMask} className="preview-shader-mask" aria-hidden="true" />
       <canvas ref={overlay} className="preview-overlay-layer" aria-hidden="true" />
       {developerAvailable && noteBorders && <PreviewNoteBorders />}
       <div className="free-camera-frame-clip" aria-hidden="true">

@@ -42,6 +42,7 @@ import {
 } from "../../../frontend/screens/editor/curveEvents/store.ts";
 import { curvePreviewLineTargets } from "../../../frontend/screens/editor/curveEvents/previewIsolation.ts";
 import {
+  CURVE_QUICK_PICK_SHORTCUT_ID,
   matchEditorShortcut,
   registerEditorShortcuts,
 } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
@@ -424,6 +425,37 @@ test("curve delete is a registered D shortcut in its own category", () => {
     assert.equal(shortcut.category, "editor.curve");
     assert.equal(shortcut.defaults[0].key, "D");
   } finally {
+    dispose();
+  }
+});
+
+test("quick curve generation uses a configurable keyboard shortcut", () => {
+  const dispose = registerEditorShortcuts();
+  const shortcutContext = {
+    atHome: false,
+    documentOpen: true,
+    modal: "none",
+    capturing: false,
+    developerMode: false,
+    textEntry: false,
+    surface: null,
+  };
+  const editorContext = { area: "notes", hasSelection: false, surface: "timeline" };
+  try {
+    const shortcut = shortcutRegistry
+      .shortcuts()
+      .find((entry) => entry.id === CURVE_QUICK_PICK_SHORTCUT_ID);
+    assert.ok(shortcut);
+    assert.deepEqual(shortcut.defaults, []);
+    assert.equal(shortcutRegistry.definition(CURVE_QUICK_PICK_SHORTCUT_ID)?.passive, undefined);
+    assert.equal(shortcutRegistry.replaceAllBindings(CURVE_QUICK_PICK_SHORTCUT_ID, ["G"]).ok, true);
+    assert.equal(
+      matchEditorShortcut({ key: "G" }, editorContext, shortcutContext),
+      CURVE_QUICK_PICK_SHORTCUT_ID,
+    );
+    assert.equal(matchEditorShortcut({ button: 0 }, editorContext, shortcutContext), undefined);
+  } finally {
+    shortcutRegistry.resetShortcut(CURVE_QUICK_PICK_SHORTCUT_ID);
     dispose();
   }
 });

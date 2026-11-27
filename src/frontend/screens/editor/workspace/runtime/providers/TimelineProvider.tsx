@@ -8,7 +8,10 @@ import { SelectionOverlay } from "../../timeline/selection/selectionOverlay.ts";
 import { Timeline } from "../../timeline/surface/timeline.ts";
 import { TimelineMarkers } from "../../../../../chrome/transport/TimelineMarkers.tsx";
 import { TimelineOverview } from "../../timeline/overview/timelineOverview.ts";
-import { bindMultiLineScroll } from "../../timeline/multiLine/multiLineScrollBinding.ts";
+import {
+  bindMultiLineScroll,
+  type MultiLineScrollState,
+} from "../../timeline/multiLine/multiLineScrollBinding.ts";
 import { createLineSwitcher } from "../../timeline/lineSwitcher/lineSwitcherBindings.ts";
 import { createScrubberSpectrumLoader } from "../../../../../chrome/transport/scrubberSpectrumLoader.ts";
 import { createSelectionClipboard } from "../../../../../../core/edit/clipboard/selectionClipboard.ts";
@@ -30,6 +33,8 @@ import type { TempoMap } from "../../../../../../core/global/chart/timing/tempo.
 /** Interaction resources that share the mounted timeline instance. */
 export interface TimelineRuntime {
   readonly timeline: Timeline;
+  /** Reactive multi-line scroll geometry shared by the viewport and CSS chrome. */
+  readonly multiLineScrollState: MultiLineScrollState;
   readonly layerButtons: LayerButtons;
   readonly audioAnalysis: AudioAnalysis;
   readonly scrubberSpectrum: ScrubberSpectrum;
@@ -323,6 +328,7 @@ export function createTimelineRuntime(options: {
 
   return {
     timeline,
+    multiLineScrollState: options.ui.multiLineScroll,
     layerButtons,
     audioAnalysis,
     scrubberSpectrum,
