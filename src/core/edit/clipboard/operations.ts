@@ -43,13 +43,11 @@ export interface ClipboardOptions {
   /** Keep source identities when projecting a visual-only clipboard preview. */
   preview?: boolean;
 }
-
 /** A beat interval covered by clipboard content or one paste. */
 export interface ClipboardBeatRange {
   start: number;
   end: number;
 }
-
 /** The clipboard projected onto a target beat, ready to be inserted. */
 export interface ClipboardProjection {
   notes: JudgeLineNote[];
@@ -62,7 +60,6 @@ export interface ClipboardProjection {
   anchorBeat?: number;
   targetLineIndex?: number;
 }
-
 /** Copies selected notes and events into the session clipboard; returns the count. */
 export function copyObjects(session: EditorSession): number {
   const snapshot = captureSelection(session);
@@ -87,7 +84,6 @@ export function copyObjects(session: EditorSession): number {
   session.clipboardRelativePlacement = true;
   return count;
 }
-
 /** Base event tracks that exist once per line layer. */
 const BASE_EVENT_TYPES = new Set<string>(EVENT_TYPES);
 
@@ -185,7 +181,6 @@ export function cutObjects(session: EditorSession): number {
   deleteObjects(session, t("editor.commands.clipboard.cutLabel"));
   return count;
 }
-
 /** Deletes selected notes and events and returns how many were removed. */
 export function deleteObjects(
   session: EditorSession,
@@ -487,7 +482,6 @@ export function projectClipboard(
     targetLineIndex: target,
   };
 }
-
 /** The beat span of one projected paste, after its relative shift. */
 function projectedBeatRange(projected: ClipboardProjection): ClipboardBeatRange | null {
   let start = Infinity;
