@@ -13,10 +13,11 @@ import {
   selectNotesAlongSegment,
   shouldSuppressTimelineContextMenu,
   timelineSweepMoved,
+  type EventSelectionGeometry,
   type SelectionGestureResult,
   type SelectionSweep,
 } from "../../../../../../core/edit/timeline/selection.ts";
-import { eventList } from "../../../../../../core/edit/events/eventTracks.ts";
+import { eventList, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import type {
   TimelineArea,
   TimelinePoint,
@@ -182,7 +183,7 @@ export function rectangleTimes(
 
 /** Return only the judge lines represented by the visible multi-line panels. */
 function visibleSelectionLines(
-  receiver: TimelineSelectionReceiver,
+  receiver: Pick<EventMarqueeSurface, "getSession" | "viewport">,
   area: TimelineArea,
   width: number,
 ): readonly number[] | undefined {
@@ -192,6 +193,96 @@ function visibleSelectionLines(
   }
   const [firstPanel, lastPanel] = receiver.viewport.visiblePanelRange(width, area);
   return session.targetLineIndices.slice(firstPanel, lastPanel + 1);
+}
+
+/**
+ * The timeline pieces an event marquee queries.
+ *
+ * It is narrower than the selection receiver so the event pointer interaction,
+ * which owns no marquee driver, can describe the same panels.
+ */
+export interface EventMarqueeSurface {
+  getSession(): ReturnType<TimelineSelectionReceiver["getSession"]>;
+  readonly eventTypes: readonly string[];
+  readonly cache: Pick<TimelineSelectionReceiver["cache"], "eventEntries">;
+  readonly gestures: Pick<TimelineSelectionReceiver["gestures"], "eventRects">;
+  readonly viewport: Pick<
+    TimelineSelectionReceiver["viewport"],
+    | "eventBarWidth"
+    | "eventColumnBounds"
+    | "eventInset"
+    | "eventTypesForLine"
+    | "gridCount"
+    | "multiLineViewportOffset"
+    | "panelIndex"
+    | "panelStride"
+    | "panelWidth"
+    | "visiblePanelRange"
+  >;
+}
+
+/**
+ * The event geometry one marquee queries.
+ *
+ * Multi-line panels are described one by one so the marquee asks each panel's
+ * own interval index for the whole beat range. The painted rectangles only
+ * cover the last frame, so a drag that reaches past the viewport would lose the
+ * events outside it.
+ */
+export function eventSelectionGeometry(
+  receiver: EventMarqueeSurface,
+  width: number,
+): EventSelectionGeometry {
+  const session = receiver.getSession();
+  const scroll = receiver.viewport.multiLineViewportOffset(width, "events");
+  const multi = session.multiLineActive && session.multiLineMode === "events";
+  const lines = multi
+    ? (visibleSelectionLines(receiver, "events", width) ?? []).map((lineIndex) => {
+        const eventTypes = receiver.viewport.eventTypesForLine(lineIndex);
+        const panelWidth = receiver.viewport.panelWidth(width, "events");
+        const inset = receiver.viewport.eventInset(panelWidth);
+        const contentWidth = Math.max(1, panelWidth - inset * 2);
+        const origin =
+          receiver.viewport.panelIndex(lineIndex, "events") *
+            receiver.viewport.panelStride(width, "events") -
+          scroll +
+          inset;
+        const channelWidth = eventTypes.length ? contentWidth / eventTypes.length : 0;
+        const barWidth =
+          channelWidth * Math.max(0.35, Math.min(1, receiver.viewport.eventBarWidth ?? 0.82));
+        return {
+          lineIndex,
+          eventTypes,
+          columnBounds: (channel: number) => ({
+            x: origin + channel * channelWidth,
+            width: barWidth,
+          }),
+          eventsInRange: (type: string, start: number, end: number) =>
+            receiver.cache.eventEntries(
+              session.chart,
+              eventListAt(session, lineIndex, type),
+              start,
+              end,
+              receiver.viewport.gridCount,
+            ),
+        };
+      })
+    : undefined;
+  return {
+    rectangles: receiver.gestures.eventRects,
+    scroll,
+    eventTypes: receiver.eventTypes,
+    columnBounds: (channel) => receiver.viewport.eventColumnBounds(channel, width),
+    eventsInRange: (type, start, end) =>
+      receiver.cache.eventEntries(
+        session.chart,
+        eventList(session, type),
+        start,
+        end,
+        receiver.viewport.gridCount,
+      ),
+    ...(lines ? { lines } : {}),
+  };
 }
 
 /** Advance the active marquee to the pointer and redraw. */
@@ -435,22 +526,7 @@ export function refreshRectangleSelection(this: TimelineSelectionReceiver): void
         baseNotes: selection.drag.baselineNotes,
         baseEvents: selection.drag.baselineEvents,
       },
-      {
-        rectangles: this.gestures.eventRects,
-        scroll: this.viewport.multiLineViewportOffset(width, "events"),
-        eventTypes: this.eventTypes,
-        columnBounds: (channel) => this.viewport.eventColumnBounds(channel, width),
-        eventsInRange: (type, start, end) => {
-          const session = this.getSession();
-          return this.cache.eventEntries(
-            session.chart,
-            eventList(session, type),
-            start,
-            end,
-            this.viewport.gridCount,
-          );
-        },
-      },
+      eventSelectionGeometry(this, width),
     );
   }
   pointerTimingEnd(queryStarted, "marqueeQuery");

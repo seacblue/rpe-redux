@@ -6,6 +6,7 @@
  * committed object without introducing a second procedural shape.
  */
 import {
+  clipProjectionToVisibleLines,
   projectClipboard,
   type ClipboardProjection,
 } from "../../../../../core/edit/clipboard/operations.ts";
@@ -40,5 +41,8 @@ export function projectClipboardGhost(
     targetLineIndex: target,
     preview: true,
   });
+  // The preview and the commit share one visibility rule, so the ghost never
+  // promises a track the paste would drop.
+  clipProjectionToVisibleLines(session, projection);
   return projection.notes.length || projection.events.length ? projection : null;
 }

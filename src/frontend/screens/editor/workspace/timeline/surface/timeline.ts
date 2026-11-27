@@ -376,6 +376,7 @@ export class Timeline {
     this.setPreview(null);
     this.cache.clear();
     this.viewport.reset();
+    this.viewport.resetMultiLineScroll();
     this.gestures.resetDocument();
     this.changed();
   }

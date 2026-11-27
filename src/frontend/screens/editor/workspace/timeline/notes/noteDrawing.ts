@@ -33,6 +33,7 @@ import {
   type TimelineRenderRange,
 } from "../../../../../../core/edit/timeline/model.ts";
 import type { TimelineNote } from "../../../../../../core/edit/timeline/types.ts";
+import type { NotePanelProjection } from "../../../../../../core/edit/timeline/timelineCoordinates.ts";
 import type {
   TimelineNoteDrawingReceiver,
   TimelinePlayheadDrawingReceiver,
@@ -289,7 +290,7 @@ export function drawNote(
   context.globalAlpha = 1;
 }
 
-/** Draws clipboard notes at the current paste target through the active skin. */
+/** Draws clipboard notes on every target panel at the current paste target. */
 function drawClipboardGhostNotes(
   this: TimelineNoteDrawingReceiver,
   context: CanvasRenderingContext2D,
@@ -299,38 +300,47 @@ function drawClipboardGhostNotes(
   const session = this.getSession();
   const targetLine = this.gestures.cursorLineIndex ?? session.lineIndex;
   const projection = projectClipboardGhost(this, targetLine);
-  if (!projection) {
+  if (!projection?.notes.length) {
     return;
   }
-  const notes = projection.notes.filter(
-    (unused, index) => (projection.noteLines?.[index] ?? targetLine) === targetLine,
-  );
-  if (!notes.length) {
-    return;
-  }
+  // Multi-line editing paints one panel per selected line, so the ghost follows
+  // every line the paste targets instead of only the panel under the pointer.
+  // The projection already dropped the lines this view cannot show; a single
+  // field still paints only the active line.
+  const multiArea = session.notesMode !== "single";
   const palette = this.cache.palette() ?? readCanvasPalette();
-  const { factor: noteFactor, project: verticalProjection } = noteProjectionFor(
-    this,
-    targetLine,
-    height,
-  );
-  const panelProjection = this.viewport.notePanelProjectionForLine(width, targetLine);
+  const panels = new Map<
+    number,
+    { factor: number; project: (seconds: number) => number; panel: NotePanelProjection }
+  >();
   context.save();
   context.filter = NOTE_GHOST_FILTER;
-  for (const sourceNote of notes) {
+  for (const [index, sourceNote] of projection.notes.entries()) {
+    const lineIndex = projection.noteLines?.[index] ?? targetLine;
+    if (!multiArea && lineIndex !== session.lineIndex) {
+      continue;
+    }
+    let target = panels.get(lineIndex);
+    if (!target) {
+      target = {
+        ...noteProjectionFor(this, lineIndex, height),
+        panel: this.viewport.notePanelProjectionForLine(width, lineIndex),
+      };
+      panels.set(lineIndex, target);
+    }
     const note = checkedNote(sourceNote);
     if (!isTimelineNoteRenderable(note)) {
       continue;
     }
-    const vertical = verticalProjection(
-      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.startTime), noteFactor),
+    const vertical = target.project(
+      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.startTime), target.factor),
     );
-    const endVertical = verticalProjection(
-      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.endTime), noteFactor),
+    const endVertical = target.project(
+      this.cache.tempoSeconds(this.viewport.tempo, beatValue(note.endTime), target.factor),
     );
     const noteWidth = this.viewport.noteWidth(note);
-    const renderedHorizontal = panelProjection.clamp(
-      panelProjection.horizontal(note.positionX),
+    const renderedHorizontal = target.panel.clamp(
+      target.panel.horizontal(note.positionX),
       noteWidth,
     );
     if (

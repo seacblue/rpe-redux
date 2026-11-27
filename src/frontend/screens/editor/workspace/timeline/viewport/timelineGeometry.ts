@@ -245,21 +245,29 @@ export function visiblePanelRange(
   );
 }
 
-/** Clamped horizontal scroll offset for one area. */
+/**
+ * Clamped horizontal scroll offset for one area.
+ *
+ * The stored offset is the user's position and this read never rewrites it: the
+ * clamp follows the current panel count, so persisting the result would send the
+ * panels back to the left edge whenever the line selection shrinks or the field
+ * leaves multi-line presentation. A panel stride does not depend on the count,
+ * so a retained offset keeps the same panel at the left edge when the selection
+ * changes, and only an offset past the new content width is clamped.
+ */
 export function multiLineViewportOffset(
   this: TimelineViewportReceiver,
   width: number,
   area: TimelineArea = "notes",
 ): number {
-  const current =
-    typeof this.multiLineScroll === "number" ? this.multiLineScroll : this.multiLineScroll?.[area];
-  const value = coreGeometry.viewportOffset(width, this.panelLayout(area), Number(current) || 0);
+  const stored =
+    typeof this.multiLineScroll === "number"
+      ? { notes: this.multiLineScroll, events: this.multiLineScroll }
+      : this.multiLineScroll;
   if (typeof this.multiLineScroll === "number") {
-    this.multiLineScroll = { notes: value, events: value };
-  } else {
-    this.multiLineScroll[area] = value;
+    this.multiLineScroll = stored;
   }
-  return value;
+  return coreGeometry.viewportOffset(width, this.panelLayout(area), Number(stored[area]) || 0);
 }
 
 /** Move one multi-line area horizontally by a pointer delta and clamp its offset. */
