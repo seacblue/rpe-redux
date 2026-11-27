@@ -1,6 +1,5 @@
 /** Owns the timeline interaction resources that share one Timeline instance. */
 import { createContext, useContext, type ReactNode } from "react";
-import { ClipboardHistory } from "../../../../../../core/edit/clipboard/clipboardHistory.ts";
 import { AudioAnalysis } from "../../timeline/audioAnalysis/audioAnalysis.ts";
 import { BatchControls } from "../../stage/batchControls/batchControls.ts";
 import { LayerButtons } from "../../timeline/layers/layerButtons.ts";
@@ -17,6 +16,7 @@ import { clipboardBeat } from "../../timeline/interaction/clipboardTarget.ts";
 import { t } from "../../../../../../i18n/index.ts";
 import { hasOpenModal } from "../../../../../../design/components/modal/Modal.tsx";
 import { values } from "../../../../../../core/state/values.ts";
+import { systemClipboard } from "../../../../../platform/systemClipboard.ts";
 import type { PreviewRuntime } from "./PreviewProvider.tsx";
 import type { EditorSessionRuntime } from "./SessionProvider.tsx";
 import type { EditorTempoSource } from "../session/tempoSource.ts";
@@ -38,7 +38,6 @@ export interface TimelineRuntime {
   readonly batchControls: BatchControls;
   readonly selectionOverlay: SelectionOverlay;
   readonly lineSwitcher: ReturnType<typeof createLineSwitcher>;
-  readonly clipboardHistory: ClipboardHistory;
   readonly selectionClipboard: ReturnType<typeof createSelectionClipboard>;
 }
 
@@ -292,7 +291,6 @@ export function createTimelineRuntime(options: {
   );
   options.scope.add(() => lineSwitcher.dispose());
 
-  const clipboardHistory = new ClipboardHistory();
   const selectionClipboard = createSelectionClipboard({
     session: getSession,
     targetLine: () =>
@@ -312,9 +310,12 @@ export function createTimelineRuntime(options: {
     setClipboardMode: (mode) => {
       timeline.gestures.clipboardMode = mode;
     },
-    history: clipboardHistory,
+    systemClipboard: systemClipboard(),
     notify: options.notify,
     copiedMessage: (count) => t("editor.app.status.copiedObjects", { count }),
+    clipboardReadFailed: (message) => t("editor.app.notice.clipboardReadFailed", { message }),
+    clipboardWriteFailed: (message) => t("editor.app.notice.clipboardWriteFailed", { message }),
+    clipboardReceived: () => t("editor.app.notice.clipboardReceived"),
     invalidate: options.invalidate,
   });
   timeline.gestures.notify = (message, level = "warning") => options.notify(message, level);
@@ -330,7 +331,6 @@ export function createTimelineRuntime(options: {
     batchControls,
     selectionOverlay,
     lineSwitcher,
-    clipboardHistory,
     selectionClipboard,
   };
 }

@@ -19,7 +19,6 @@ import {
   copyObjectsAllLayers,
   pasteObjects,
 } from "../../../core/edit/clipboard/operations.ts";
-import { ClipboardHistory } from "../../../core/edit/clipboard/clipboardHistory.ts";
 import { EDITOR_SHORTCUTS } from "../../../core/edit/shortcuts/shortcutCatalog.ts";
 import {
   matchEditorShortcut,
@@ -106,31 +105,6 @@ test("Ctrl+Shift+C copies every base layer of the selected types", () => {
   assert.equal(session.chart.judgeLineList[1].eventLayers?.[4]?.moveXEvents?.length ?? 0, 0);
   // The selection model addresses one layer; only the active layer is selected.
   assert.equal(session.multiEventSelection.get(1)?.size, 1);
-});
-
-test("a layer-preserving clipboard snapshot survives history attach", () => {
-  const chart = chartWithLines(2);
-  chart.judgeLineList[0].eventLayers = [0, 1].map((layer) => ({
-    moveXEvents: [createEvent(layer, layer, 4, 5)],
-  }));
-  const session = new EditorSession(chart);
-  session.eventLayer = 0;
-  session.eventSelection = new Set(["moveXEvents:0"]);
-  copyObjectsAllLayers(session);
-
-  const history = new ClipboardHistory();
-  history.remember(session);
-
-  const restored = new EditorSession(chartWithLines(2));
-  restored.eventLayer = 1;
-  history.attach(restored);
-  assert.equal(restored.eventClipboardPreserveLayers, true);
-  assert.deepEqual(restored.eventClipboardLayers, [0, 1]);
-
-  assert.equal(pasteObjects(restored, 20, { targetLineIndex: 0 }), true);
-  assert.equal(moveXEvents(restored, 0, 0).length, 1);
-  assert.equal(moveXEvents(restored, 0, 1).length, 1);
-  assert.equal(moveXEvents(restored, 0, 2).length, 1);
 });
 
 test("a dropped lowest layer does not shift the paste anchor", () => {

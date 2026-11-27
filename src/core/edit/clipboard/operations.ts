@@ -84,6 +84,7 @@ export function copyObjects(session: EditorSession): number {
   // copying from one layer and pasting into another work.
   session.eventClipboardLayers = snapshot.events.map(() => session.eventLayer);
   session.eventClipboardPreserveLayers = false;
+  session.clipboardRelativePlacement = true;
   return count;
 }
 
@@ -171,6 +172,7 @@ export function copyObjectsAllLayers(session: EditorSession): number {
   session.eventClipboardLines = eventLines;
   session.eventClipboardLayers = eventLayers;
   session.eventClipboardPreserveLayers = true;
+  session.clipboardRelativePlacement = true;
   return session.clipboard.length + events.length;
 }
 
@@ -359,6 +361,7 @@ export function projectClipboard(
   { mirror = false, keepTime = false, targetLineIndex, preview = false }: ClipboardOptions = {},
 ): ClipboardProjection {
   const lineCount = session.chart?.judgeLineList?.length ?? 0;
+  const relativePlacement = session.clipboardRelativePlacement !== false;
   const noteLines = session.clipboard.map((unused, index) =>
     Number.isInteger(session.clipboardNoteLines?.[index])
       ? session.clipboardNoteLines[index]
@@ -373,7 +376,8 @@ export function projectClipboard(
     const layer = session.eventClipboardLayers?.[index];
     return Number.isInteger(layer) ? layer : session.eventLayer;
   });
-  const targetLayerAnchor = session.eventClipboardPreserveLayers
+  const preserveEventLayers = relativePlacement && session.eventClipboardPreserveLayers;
+  const targetLayerAnchor = preserveEventLayers
     ? Math.min(
         ...session.eventClipboard.flatMap(({ type }, index) =>
           BASE_EVENT_TYPES.has(type) ? [sourceEventLayers[index]] : [],
@@ -386,7 +390,7 @@ export function projectClipboard(
   const eventEntries: { type: string; event: JudgeLineEvent }[] = [];
   for (const [index, entry] of session.eventClipboard.entries()) {
     let layer = session.eventLayer;
-    if (session.eventClipboardPreserveLayers) {
+    if (preserveEventLayers) {
       layer = BASE_EVENT_TYPES.has(entry.type)
         ? session.eventLayer + sourceEventLayers[index] - layerAnchor
         : session.eventLayer;
@@ -430,6 +434,9 @@ export function projectClipboard(
       ? targetLineIndex
       : session.lineIndex;
   const mapLine = (source: number): number => {
+    if (!relativePlacement) {
+      return target;
+    }
     const mapped = target + source - sourceAnchor;
     if (!lineCount) {
       return mapped;

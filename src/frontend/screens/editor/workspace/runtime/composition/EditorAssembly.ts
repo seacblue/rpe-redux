@@ -30,7 +30,6 @@ import { MODAL_PRIORITY } from "../../../../../overlays/modals/modalQueue.ts";
 import { registerEditorShortcuts } from "../../../../../../core/edit/shortcuts/shortcutCatalog.ts";
 import { shortcutRegistry } from "../../../../../../core/shortcuts/registry.ts";
 import { t } from "../../../../../../i18n/index.ts";
-import { bindClipboardHistoryPersistence } from "../../../../../../core/edit/clipboard/clipboardHistoryPersistence.ts";
 import { openInspector, closeInspector } from "../../../inspector/controller.ts";
 import { nudgeBeat, type Beat } from "../../../../../../core/global/chart/timing/beat.ts";
 import { createEditorHomeRuntime } from "../../../../welcome/editorHome.ts";
@@ -455,7 +454,6 @@ export function createEditorAssembly(
     batchControls,
     selectionOverlay,
     lineSwitcher,
-    clipboardHistory,
     selectionClipboard,
   } = timelineRuntime;
   // Hit-test geometry is demand-driven: `getCollisionGeometry()` performs one
@@ -498,14 +496,7 @@ export function createEditorAssembly(
   const { multiEdit, trajectoryPanel, multiLinePanel, linePanel, assetLibrary, curveEditor } =
     inspectorRuntime;
   batchControls.onCommit = () => multiEdit.clearPreview();
-  scope.add(
-    bindClipboardHistoryPersistence(clipboardHistory, (message) => notify(message, "error"), {
-      session: () => session.current,
-      invalidate,
-      onExternalClipboard: () =>
-        notify(t("editor.app.notice.clipboardHistoryReceived"), "info", 5000),
-    }),
-  );
+  scope.add(selectionClipboard.startSystemSync());
   scope.add(
     bindAnalysisActions({
       audioAnalysis,
@@ -1080,7 +1071,6 @@ export function createEditorAssembly(
       },
       timeline: {
         audioAnalysis: timelineRuntime.audioAnalysis,
-        clipboardHistory: timelineRuntime.clipboardHistory,
         lineSwitcher: timelineRuntime.lineSwitcher,
         scrubberSpectrumLoader: timelineRuntime.scrubberSpectrumLoader,
         timeline: timelineRuntime.timeline,
