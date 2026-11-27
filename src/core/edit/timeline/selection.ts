@@ -570,6 +570,20 @@ export function selectNotesAlongSegment(
   return { changed: dirty, matched };
 }
 
+/** One multi-line panel a marquee can reach, with its own tracks and columns. */
+export interface EventSelectionLine {
+  lineIndex: number;
+  eventTypes: readonly string[];
+  /** Canvas x and bar width of one column, already offset into its panel. */
+  columnBounds(channel: number): { x: number; width: number };
+  /** Beat-range query for one track of this panel. */
+  eventsInRange(
+    type: string,
+    start: number,
+    end: number,
+  ): readonly { index: number; item: JudgeLineEvent }[];
+}
+
 export interface EventSelectionGeometry {
   rectangles: readonly TimelineEventRect[];
   scroll: number;
@@ -581,6 +595,110 @@ export interface EventSelectionGeometry {
     start: number,
     end: number,
   ): readonly { index: number; item: JudgeLineEvent }[];
+  /**
+   * The visible multi-line panels.
+   *
+   * When present, a multi-line marquee queries each panel's own interval index,
+   * so a range that reaches past the viewport still selects the events outside
+   * it. Painted rectangles remain the fallback for callers that do not describe
+   * their panels, because they only cover what the last frame drew.
+   */
+  lines?: readonly EventSelectionLine[];
+}
+
+/** One event the marquee covers, with the canvas x of its bar. */
+interface EventRectangleHit {
+  lineIndex: number;
+  type: string;
+  index: number;
+  item: JudgeLineEvent;
+  x: number;
+}
+
+/** True when one event's span intersects a marquee's beat range. */
+function eventWithinRectangle(event: JudgeLineEvent, bottom: number, top: number): boolean {
+  const start = beatValue(event.startTime);
+  if (hasNonPositiveRange(event.startTime, event.endTime)) {
+    return start <= top && start >= bottom;
+  }
+  return start <= top && beatValue(event.endTime) >= bottom;
+}
+
+/**
+ * Every event a multi-line marquee covers, in panel then column order.
+ *
+ * The beat range comes from the drag, which can extend past the canvas while the
+ * pointer is captured, so the candidate set must not come from the painted
+ * rectangles: those describe one frame and would silently drop the events the
+ * user dragged towards.
+ */
+function multiLineEventHits(
+  session: EditorSession,
+  geometry: EventSelectionGeometry,
+  rectangle: { left: number; right: number; bottom: number; top: number },
+): EventRectangleHit[] {
+  const { left, right, bottom, top } = rectangle;
+  const scroll = geometry.scroll;
+  const hits: EventRectangleHit[] = [];
+  const lines = geometry.lines;
+  if (!lines) {
+    for (const hit of geometry.rectangles) {
+      const lineIndex = hit.lineIndex ?? session.lineIndex;
+      if (!session.targetLineIndices.includes(lineIndex)) {
+        continue;
+      }
+      const item = eventListAt(session, lineIndex, hit.type)[hit.index];
+      if (!item || !eventWithinRectangle(item, bottom, top)) {
+        continue;
+      }
+      if (hit.x + scroll >= right || hit.x + hit.width + scroll <= left) {
+        continue;
+      }
+      hits.push({ lineIndex, type: hit.type, index: hit.index, item, x: hit.x + scroll });
+    }
+    return hits;
+  }
+  for (const line of lines) {
+    if (!session.targetLineIndices.includes(line.lineIndex)) {
+      continue;
+    }
+    line.eventTypes.forEach((type, channel) => {
+      const bounds = line.columnBounds(channel);
+      if (bounds.x + scroll >= right || bounds.x + bounds.width + scroll <= left) {
+        return;
+      }
+      const items = eventListAt(session, line.lineIndex, type);
+      const lanes = type === "paintEvents" ? lanesFor(items) : null;
+      for (const entry of line.eventsInRange(type, bottom, top)) {
+        if (!eventWithinRectangle(entry.item, bottom, top)) {
+          continue;
+        }
+        let x = bounds.x;
+        if (lanes) {
+          const lane = lanes.get(entry.index);
+          if (!lane) {
+            continue;
+          }
+          const width = bounds.width / lane.count;
+          x = bounds.x + lane.lane * width;
+          if (
+            x + scroll >= right ||
+            x + Math.max(2, width - (lane.count > 1 ? 2 : 0)) + scroll <= left
+          ) {
+            continue;
+          }
+        }
+        hits.push({
+          lineIndex: line.lineIndex,
+          type,
+          index: entry.index,
+          item: entry.item,
+          x: x + scroll,
+        });
+      }
+    });
+  }
+  return hits;
 }
 
 /** Geometry needed to test drawn event bars against a freehand segment. */
@@ -695,38 +813,19 @@ export function selectEventsInRectangle(
     if (multi) {
       const next = new Map<number, Set<string>>();
       let lastAdded: { lineIndex: number; key: string; x: number } | null = null;
-      for (const hit of geometry.rectangles) {
-        if (hit.x + geometry.scroll >= right || hit.x + hit.width + geometry.scroll <= left) {
-          continue;
-        }
-        const lineIndex = hit.lineIndex ?? session.lineIndex;
-        if (!session.targetLineIndices.includes(lineIndex)) {
-          continue;
-        }
-        const item = eventListAt(session, lineIndex, hit.type)[hit.index];
-        if (!item) {
-          continue;
-        }
-        const invalidRange = hasNonPositiveRange(item.startTime, item.endTime);
-        if (
-          invalidRange
-            ? beatValue(item.startTime) > top || beatValue(item.startTime) < bottom
-            : beatValue(item.startTime) > top || beatValue(item.endTime) < bottom
-        ) {
-          continue;
-        }
+      for (const hit of multiLineEventHits(session, geometry, { left, right, bottom, top })) {
         matched = true;
-        const selected = next.get(lineIndex) ?? new Set<string>();
+        const selected = next.get(hit.lineIndex) ?? new Set<string>();
         const key = eventKey(hit.type, hit.index);
         if (!selected.has(key)) {
           selected.add(key);
           lastAdded = lastEvent(lastAdded, {
-            lineIndex,
+            lineIndex: hit.lineIndex,
             key,
-            x: hit.x + geometry.scroll,
+            x: hit.x,
           });
         }
-        next.set(lineIndex, selected);
+        next.set(hit.lineIndex, selected);
       }
       let changed = next.size !== session.multiEventSelection.size;
       if (!changed) {
@@ -807,26 +906,13 @@ export function selectEventsInRectangle(
   let lastAdded: { lineIndex: number; key: string; x: number } | null = null;
   dirty = pruneEventBaseline(session) || dirty;
   if (session.multiLineActive && session.multiLineMode === "events") {
-    for (const hit of geometry.rectangles) {
-      if (hit.x + geometry.scroll >= right || hit.x + hit.width + geometry.scroll <= left) {
-        continue;
-      }
-      const lineIndex = hit.lineIndex ?? session.lineIndex;
-      const item = eventListAt(session, lineIndex, hit.type)[hit.index];
+    for (const hit of multiLineEventHits(session, geometry, { left, right, bottom, top })) {
+      const { lineIndex, type, index } = hit;
       const selected =
         lineIndex === session.lineIndex
           ? session.eventSelection
           : (session.multiEventSelection?.get(lineIndex) ?? new Set<string>());
-      const invalidRange = item && hasNonPositiveRange(item.startTime, item.endTime);
-      if (
-        !item ||
-        (invalidRange
-          ? beatValue(item.startTime) > top || beatValue(item.startTime) < bottom
-          : beatValue(item.startTime) > top || beatValue(item.endTime) < bottom)
-      ) {
-        continue;
-      }
-      const key = eventKey(hit.type, hit.index);
+      const key = eventKey(type, index);
       const changed = remove ? selected.delete(key) : !selected.has(key);
       if (changed) {
         dirty = true;
@@ -835,7 +921,7 @@ export function selectEventsInRectangle(
           lastAdded = lastEvent(lastAdded, {
             lineIndex,
             key,
-            x: hit.x + geometry.scroll,
+            x: hit.x,
           });
         }
       }

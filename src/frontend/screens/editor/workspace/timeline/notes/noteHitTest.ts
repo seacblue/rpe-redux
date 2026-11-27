@@ -34,18 +34,34 @@ export function visible(
   return this.cache.visibleNotes(lineIndex, bottom, top);
 }
 
+/**
+ * The judge lines one pointer position can hit.
+ *
+ * A merged note field paints every selected line in one panel, so the pointer
+ * there belongs to all of them; a split field owns one line per panel, and the
+ * panel under the pointer is the only one it can reach.
+ */
+function hitLineIndices(
+  this: TimelineNoteHitTestReceiver,
+  position: TimelinePoint,
+): readonly number[] {
+  const session = this.getSession();
+  if (
+    session.multiLineActive &&
+    session.multiLineMode === "notes" &&
+    this.viewport.panelCount("notes") === 1
+  ) {
+    return session.targetLineIndices;
+  }
+  return [this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")];
+}
+
 /** Notes under `position` across every panel a merged note view can hit. */
 function candidates(
   this: TimelineNoteHitTestReceiver,
   position: TimelinePoint,
 ): TimelineNoteEntry[] {
-  const session = this.getSession();
-  const lineIndices =
-    session.multiLineActive &&
-    session.multiLineMode === "notes" &&
-    this.viewport.panelCount("notes") === 1
-      ? session.targetLineIndices
-      : [this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes")];
+  const lineIndices = hitLineIndices.call(this, position);
   const entries = lineIndices.flatMap((lineIndex) => this.visible(lineIndex));
   const rotations = noteRotations.call(this, lineIndices);
   return timelineNoteCandidates(
@@ -107,12 +123,12 @@ export function hit(
   this: TimelineNoteHitTestReceiver,
   position: TimelinePoint,
 ): TimelineNoteEntry | undefined {
-  const lineIndex = this.viewport.lineIndexAt(position.x, this.notesCanvas.clientWidth, "notes");
+  const lineIndices = hitLineIndices.call(this, position);
   const visibleStarted = pointerTimingStart();
-  const entries = this.visible(lineIndex);
+  const entries = lineIndices.flatMap((lineIndex) => this.visible(lineIndex));
   pointerTimingEnd(visibleStarted, "hitVisibleQuery");
   const overlapStarted = pointerTimingStart();
-  const rotations = noteRotations.call(this, [lineIndex]);
+  const rotations = noteRotations.call(this, lineIndices);
   pointerTimingEnd(overlapStarted, "hitOverlapRanks");
   return hitTimelineNote(entries, position, {
     horizontal: (note, lineIndex) => this.viewport.noteHorizontal(note.positionX, lineIndex),

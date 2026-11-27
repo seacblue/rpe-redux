@@ -95,7 +95,7 @@ export function drawEventHeaderBand(
   labelBatch?.addRect(fillLeft, 0, fillWidth, 23, color);
 }
 
-/** Draws clipboard events at the current paste target through the event skin. */
+/** Draws clipboard events on every target panel at the current paste target. */
 function drawClipboardGhostEvents(
   this: TimelineEventDrawingReceiver,
   context: CanvasRenderingContext2D,
@@ -105,39 +105,58 @@ function drawClipboardGhostEvents(
   const session = this.getSession();
   const targetLine = this.gestures.cursorLineIndex ?? session.lineIndex;
   const projection = projectClipboardGhost(this, targetLine);
-  if (!projection) {
+  if (!projection?.events.length) {
     return;
   }
-  const eventTypes = this.viewport.eventTypesForLine(targetLine);
-  if (!eventTypes.length) {
-    return;
-  }
-  const verticalAt = createVerticalAtBeat(this, this.viewport.factorForLine(targetLine), height);
-  const multiLine = session.multiLineActive && session.multiLineMode === "events";
-  const panelWidth = multiLine ? this.viewport.panelWidth(width, "events") : width;
-  const panelOffset = multiLine
-    ? this.viewport.panelIndex(targetLine, "events") * this.viewport.panelStride(width, "events") -
-      this.viewport.multiLineViewportOffset(width, "events")
-    : 0;
+  // Multi-line editing paints one panel per selected line, so the ghost follows
+  // every line the paste targets instead of only the panel under the pointer.
+  // The projection already dropped the lines this view cannot show; a single
+  // field still paints only the active line.
+  const multiArea = session.eventsMode === "multi";
+  const panelWidth = multiArea ? this.viewport.panelWidth(width, "events") : width;
+  const stride = multiArea ? this.viewport.panelStride(width, "events") : 0;
+  const viewportOffset = multiArea ? this.viewport.multiLineViewportOffset(width, "events") : 0;
+  const eventInset = this.viewport.eventInset(panelWidth);
+  const contentWidth = Math.max(1, panelWidth - eventInset * 2);
+  const barRatio = Math.max(0.35, Math.min(1, this.appearance.eventBarWidth ?? 0.82));
+  const lines = new Map<
+    number,
+    { eventTypes: string[]; verticalAt: (beat: number) => number; offset: number }
+  >();
   context.save();
   for (const [index, entry] of projection.events.entries()) {
-    if ((projection.eventLines?.[index] ?? targetLine) !== targetLine) {
+    const lineIndex = projection.eventLines?.[index] ?? targetLine;
+    if (!multiArea && lineIndex !== session.lineIndex) {
       continue;
     }
-    const channel = eventTypes.indexOf(entry.type);
+    let line = lines.get(lineIndex);
+    if (!line) {
+      line = {
+        eventTypes: this.viewport.eventTypesForLine(lineIndex),
+        verticalAt: createVerticalAtBeat(this, this.viewport.factorForLine(lineIndex), height),
+        offset: multiArea
+          ? this.viewport.panelIndex(lineIndex, "events") * stride - viewportOffset + eventInset
+          : 0,
+      };
+      lines.set(lineIndex, line);
+    }
+    const channel = line.eventTypes.indexOf(entry.type);
     if (channel < 0) {
       continue;
     }
-    const column = this.viewport.eventColumnBounds(channel, panelWidth);
-    const top = verticalAt(beatValue(entry.event.endTime));
-    const bottom = verticalAt(beatValue(entry.event.startTime));
+    // Column geometry follows the panel's own track list, so a line that hides
+    // some tracks keeps the same column widths as its committed bars.
+    const channelWidth = contentWidth / line.eventTypes.length;
+    const barWidth = channelWidth * barRatio;
+    const top = line.verticalAt(beatValue(entry.event.endTime));
+    const bottom = line.verticalAt(beatValue(entry.event.startTime));
     if (bottom < 23 || top > height) {
       continue;
     }
     const rectangle = {
-      x: panelOffset + column.x,
+      x: line.offset + channel * channelWidth + (channelWidth - barWidth) / 2,
       y: Math.max(23, top),
-      width: column.width,
+      width: barWidth,
       height: Math.max(2, Math.min(height, bottom) - Math.max(23, top)),
     };
     context.globalAlpha = eventBarOpacity(

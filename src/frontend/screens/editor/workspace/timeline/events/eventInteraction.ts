@@ -18,18 +18,18 @@ import { t } from "../../../../../../i18n/index.ts";
 import type { LineEventValue } from "../../../../../../core/global/chart/chart.ts";
 import { eventTypeAt } from "../drawing/tracks.ts";
 import { eventColumnForTrack } from "./eventColumns.ts";
-import {
-  eventKey,
-  eventListAt,
-  eventList,
-} from "../../../../../../core/edit/events/eventTracks.ts";
+import { eventKey, eventListAt } from "../../../../../../core/edit/events/eventTracks.ts";
 import { placeEventAtBeatTarget } from "../../../../../../core/edit/events/eventCommands.ts";
 import type { EventInteractionHandle } from "../drawing/canvas.ts";
 import type {
   TimelineEventDrag,
   TimelinePoint,
 } from "../../../../../../core/edit/timeline/types.ts";
-import { captureEventBaseline, marqueeHistoryKey } from "../selection/rectangleSelection.ts";
+import {
+  captureEventBaseline,
+  eventSelectionGeometry,
+  marqueeHistoryKey,
+} from "../selection/rectangleSelection.ts";
 import {
   openOverlapMenu,
   type OverlapMenuAction,
@@ -755,26 +755,7 @@ export class EventInteraction implements EventInteractionHandle {
             baseNotes: drag.baselineNotes,
             baseEvents: drag.baselineEvents,
           },
-          {
-            rectangles: this.timeline.gestures.eventRects,
-            scroll: this.timeline.viewport.multiLineViewportOffset(
-              this.canvas.clientWidth,
-              "events",
-            ),
-            eventTypes: this.timeline.eventTypes,
-            columnBounds: (channel) =>
-              this.timeline.viewport.eventColumnBounds(channel, this.canvas.clientWidth),
-            eventsInRange: (type, start, end) => {
-              const session = this.timeline.getSession();
-              return this.timeline.cache.eventEntries(
-                session.chart,
-                eventList(session, type),
-                start,
-                end,
-                this.timeline.viewport.gridCount,
-              );
-            },
-          },
+          eventSelectionGeometry(this.timeline, this.canvas.clientWidth),
         );
       } else {
         commitEventEdgeDrag(session, drag, delta);

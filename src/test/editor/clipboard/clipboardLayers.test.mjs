@@ -67,7 +67,7 @@ test("multi-line event blocks keep their relative line and time offsets", () => 
   session.eventLayer = 0;
   session.multiLineEnabled = true;
   session.multiLineMode = "events";
-  session.multiLineIndices = [0, 2];
+  session.multiLineIndices = [0, 1, 2, 3];
   session.multiEventSelection = new Map([
     [0, new Set(["moveXEvents:0"])],
     [2, new Set(["moveXEvents:0"])],
@@ -79,6 +79,59 @@ test("multi-line event blocks keep their relative line and time offsets", () => 
   assert.equal(pasteObjects(session, 10, { targetLineIndex: 1 }), true);
   assert.equal(beatValue(moveXEvents(session, 1, 0).at(-1).startTime), 10);
   assert.equal(beatValue(moveXEvents(session, 3, 0).at(-1).startTime), 12);
+});
+
+test("a multi-line paste writes only the tracks the field shows", () => {
+  const chart = chartWithLines(4);
+  chart.judgeLineList[0].eventLayers[0].moveXEvents = [createEvent(0, 0, 4, 4.5)];
+  chart.judgeLineList[2].eventLayers[0].moveXEvents = [createEvent(0, 0, 6, 6.5)];
+  const session = new EditorSession(chart);
+  session.eventLayer = 0;
+  session.multiLineEnabled = true;
+  session.multiLineMode = "events";
+  session.multiLineIndices = [0, 2];
+  session.multiEventSelection = new Map([
+    [0, new Set(["moveXEvents:0"])],
+    [2, new Set(["moveXEvents:0"])],
+  ]);
+  assert.equal(copyObjects(session), 2);
+
+  // Targeting line 1 maps the block onto lines 1 and 3; the field shows only
+  // lines 0 and 2, so there is no visible track to write.
+  const pastedAt = (lineIndex, beat) =>
+    moveXEvents(session, lineIndex, 0).some((event) => beatValue(event.startTime) === beat);
+  assert.equal(pasteObjects(session, 10, { targetLineIndex: 1 }), false);
+  assert.equal(pastedAt(1, 10), false);
+  assert.equal(pastedAt(3, 10), false);
+
+  // Targeting a visible line keeps both visible tracks and their offsets.
+  assert.equal(pasteObjects(session, 20, { targetLineIndex: 0 }), true);
+  assert.equal(pastedAt(0, 20), true);
+  assert.equal(pastedAt(2, 22), true);
+});
+
+test("a multi-line note paste covers every visible track", () => {
+  const chart = chartWithLines(4);
+  chart.judgeLineList[0].notes = [createNote(1, 0, 0.5)];
+  chart.judgeLineList[0].numOfNotes = 1;
+  chart.judgeLineList[1].notes = [createNote(1, 0, -0.5)];
+  chart.judgeLineList[1].numOfNotes = 1;
+  const session = new EditorSession(chart);
+  session.multiLineEnabled = true;
+  session.multiLineMode = "notes";
+  session.multiLineIndices = [0, 1, 2, 3];
+  session.multiLineSelection = new Map([
+    [0, new Set([0])],
+    [1, new Set([0])],
+  ]);
+  assert.equal(copyObjects(session), 2);
+
+  assert.equal(pasteObjects(session, 8, { targetLineIndex: 1 }), true);
+  // The block is anchored on line 0, so it shifts onto lines 1 and 2.
+  assert.equal(session.chart.judgeLineList[1].notes.length, 2);
+  assert.equal(beatValue(session.chart.judgeLineList[1].notes[1].startTime), 8);
+  assert.equal(session.chart.judgeLineList[2].notes.length, 1);
+  assert.equal(beatValue(session.chart.judgeLineList[2].notes[0].startTime), 8);
 });
 
 test("Ctrl+Shift+C copies every base layer of the selected types", () => {

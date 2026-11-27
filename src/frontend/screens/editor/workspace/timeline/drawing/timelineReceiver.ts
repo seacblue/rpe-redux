@@ -186,6 +186,7 @@ export type TimelineEventInteractionReceiver = Pick<
     | "verticalForLine"
     | "eventVertical"
     | "division"
+    | "visiblePanelRange"
   >;
 };
 
