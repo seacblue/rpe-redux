@@ -170,7 +170,7 @@ type DocumentPreviewResources = Pick<
 
 type DocumentTimelineResources = Pick<
   TimelineRuntime,
-  "audioAnalysis" | "clipboardHistory" | "lineSwitcher" | "scrubberSpectrumLoader" | "timeline"
+  "audioAnalysis" | "lineSwitcher" | "scrubberSpectrumLoader" | "timeline"
 >;
 
 type DocumentPlaybackResources = Pick<PlaybackRuntime, "autoSave" | "playback">;
@@ -312,7 +312,6 @@ export function createDocumentRuntime(options: {
       },
       mutationGate,
       history: {
-        clipboard: timeline.clipboardHistory,
         limit: () => Number(displayValues.historyLimit.get() ?? 150),
         onChange: () => {
           if (options.scheduleRenderSession) {
@@ -904,7 +903,6 @@ export function createDocumentRuntime(options: {
         getSession().removeEventListener("change", options.renderSession);
         options.session.replace(previous);
         previous.addEventListener("change", options.renderSession);
-        timeline.clipboardHistory.attach(previous);
         options.document.assets = previousAssets;
         options.document.chartName = previousName;
         assignLibraryProject(previousProject);

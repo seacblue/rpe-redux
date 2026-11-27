@@ -214,10 +214,10 @@ export default {
     "Automatic backup failed: {message}. Save by hand or export a PEZ.",
   "editor.app.notice.backupSaving": "Saving automatic backup…",
   "editor.app.notice.backupSaved": "Automatic backup saved",
-  "editor.app.notice.clipboardHistoryLoadFailed": "Could not read the clipboard history: {message}",
-  "editor.app.notice.clipboardHistorySaveFailed": "Could not save the clipboard history: {message}",
-  "editor.app.notice.clipboardHistoryReceived":
-    "Clipboard content was received from another RPE Redux instance or an external source.",
+  "editor.app.notice.clipboardReadFailed": "Could not read the chart clipboard: {message}",
+  "editor.app.notice.clipboardWriteFailed": "Could not write the chart clipboard: {message}",
+  "editor.app.notice.clipboardReceived":
+    "Chart clipboard content was received from an external source.",
   "editor.app.notice.desktopEnvironment":
     "Some native features need the desktop application; the chart library and editor stay available in the browser.",
   "editor.app.notice.desktopOnlyBackup": "Automatic backup needs the desktop app",
@@ -280,7 +280,6 @@ export default {
   "editor.commands.clipboard.deleteLabel": "Delete selection",
   "editor.commands.clipboard.pasteLabel": "Paste selection",
   "editor.commands.clipboard.pasteMirrorLabel": "Paste mirrored",
-  "editor.commands.clipboardHistory.untitledChart": "Untitled chart",
   "editor.commands.eventCommands.error.needLine": "Add a judge line first.",
   "editor.commands.eventCommands.error.endBeforeStart":
     "The event's end beat cannot be earlier than its start beat.",

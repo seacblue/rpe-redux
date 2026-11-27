@@ -43,13 +43,11 @@ export interface ClipboardOptions {
   /** Keep source identities when projecting a visual-only clipboard preview. */
   preview?: boolean;
 }
-
 /** A beat interval covered by clipboard content or one paste. */
 export interface ClipboardBeatRange {
   start: number;
   end: number;
 }
-
 /** The clipboard projected onto a target beat, ready to be inserted. */
 export interface ClipboardProjection {
   notes: JudgeLineNote[];
@@ -62,7 +60,6 @@ export interface ClipboardProjection {
   anchorBeat?: number;
   targetLineIndex?: number;
 }
-
 /** Copies selected notes and events into the session clipboard; returns the count. */
 export function copyObjects(session: EditorSession): number {
   const snapshot = captureSelection(session);
@@ -84,9 +81,9 @@ export function copyObjects(session: EditorSession): number {
   // copying from one layer and pasting into another work.
   session.eventClipboardLayers = snapshot.events.map(() => session.eventLayer);
   session.eventClipboardPreserveLayers = false;
+  session.clipboardRelativePlacement = true;
   return count;
 }
-
 /** Base event tracks that exist once per line layer. */
 const BASE_EVENT_TYPES = new Set<string>(EVENT_TYPES);
 
@@ -171,6 +168,7 @@ export function copyObjectsAllLayers(session: EditorSession): number {
   session.eventClipboardLines = eventLines;
   session.eventClipboardLayers = eventLayers;
   session.eventClipboardPreserveLayers = true;
+  session.clipboardRelativePlacement = true;
   return session.clipboard.length + events.length;
 }
 
@@ -183,7 +181,6 @@ export function cutObjects(session: EditorSession): number {
   deleteObjects(session, t("editor.commands.clipboard.cutLabel"));
   return count;
 }
-
 /** Deletes selected notes and events and returns how many were removed. */
 export function deleteObjects(
   session: EditorSession,
@@ -359,6 +356,7 @@ export function projectClipboard(
   { mirror = false, keepTime = false, targetLineIndex, preview = false }: ClipboardOptions = {},
 ): ClipboardProjection {
   const lineCount = session.chart?.judgeLineList?.length ?? 0;
+  const relativePlacement = session.clipboardRelativePlacement !== false;
   const noteLines = session.clipboard.map((unused, index) =>
     Number.isInteger(session.clipboardNoteLines?.[index])
       ? session.clipboardNoteLines[index]
@@ -373,7 +371,8 @@ export function projectClipboard(
     const layer = session.eventClipboardLayers?.[index];
     return Number.isInteger(layer) ? layer : session.eventLayer;
   });
-  const targetLayerAnchor = session.eventClipboardPreserveLayers
+  const preserveEventLayers = relativePlacement && session.eventClipboardPreserveLayers;
+  const targetLayerAnchor = preserveEventLayers
     ? Math.min(
         ...session.eventClipboard.flatMap(({ type }, index) =>
           BASE_EVENT_TYPES.has(type) ? [sourceEventLayers[index]] : [],
@@ -386,7 +385,7 @@ export function projectClipboard(
   const eventEntries: { type: string; event: JudgeLineEvent }[] = [];
   for (const [index, entry] of session.eventClipboard.entries()) {
     let layer = session.eventLayer;
-    if (session.eventClipboardPreserveLayers) {
+    if (preserveEventLayers) {
       layer = BASE_EVENT_TYPES.has(entry.type)
         ? session.eventLayer + sourceEventLayers[index] - layerAnchor
         : session.eventLayer;
@@ -430,6 +429,9 @@ export function projectClipboard(
       ? targetLineIndex
       : session.lineIndex;
   const mapLine = (source: number): number => {
+    if (!relativePlacement) {
+      return target;
+    }
     const mapped = target + source - sourceAnchor;
     if (!lineCount) {
       return mapped;
@@ -480,7 +482,6 @@ export function projectClipboard(
     targetLineIndex: target,
   };
 }
-
 /** The beat span of one projected paste, after its relative shift. */
 function projectedBeatRange(projected: ClipboardProjection): ClipboardBeatRange | null {
   let start = Infinity;

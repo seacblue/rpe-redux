@@ -1,13 +1,12 @@
 /**
- * Installs a replacement session and transfers the editor listeners, clipboard,
- * recovery clock, and media bindings onto it. Later replacements follow the same
+ * Installs a replacement session and transfers the editor listeners, recovery
+ * clock, and media bindings onto it. Later replacements follow the same
  * path; callers keep reading the session through the provider.
  */
 import {
   EditorSession,
   type SessionMutationGate,
 } from "../../../../../../core/edit/session/session.ts";
-import type { ClipboardHistory } from "../../../../../../core/edit/clipboard/clipboardHistory.ts";
 import type { AutoSaveClock } from "../../../../../../core/edit/session/autosave.ts";
 import type { HitSounds } from "../../../../../../core/media/hitsounds.ts";
 import type { ProjectImages } from "../../../../../../core/media/images.ts";
@@ -19,7 +18,7 @@ import { chartEditSeconds } from "../../../../../../core/global/chart/editTime.t
 export interface DocumentInstallOptions {
   session: { current(): EditorSession; replace(session: EditorSession): void };
   mutationGate: SessionMutationGate;
-  history: { clipboard: Pick<ClipboardHistory, "attach">; limit(): number; onChange(): void };
+  history: { limit(): number; onChange(): void };
   /** Publishes the final document revision after streamed digests arrive. */
   fingerprintReady?(session: EditorSession): void;
   resetSelectionView(): void;
@@ -50,7 +49,6 @@ export function createSessionInstaller(options: DocumentInstallOptions) {
     session.setMutationGate(options.mutationGate);
     options.session.replace(session);
     options.attachLocalStats?.(session);
-    options.history.clipboard.attach(session);
     options.resetSelectionView();
     session.history.limit = options.history.limit();
     session.addEventListener("change", options.history.onChange);

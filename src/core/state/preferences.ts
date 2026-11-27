@@ -20,8 +20,6 @@ export const PREFERENCE_SECTIONS = Object.freeze({
   shortcuts: "shortcuts",
   /** Active note texture pack id; image bytes remain on disk. */
   noteSkin: "noteSkin",
-  /** The app-private clipboard history and current clipboard snapshot. */
-  clipboard: "clipboard",
   /** Active interface skin id. */
   appearance: "appearance",
   /** Icon package override merged over the active theme's glyphs. */

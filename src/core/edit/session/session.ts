@@ -321,6 +321,8 @@ export class EditorSession extends EventTarget {
   eventClipboardLayers: number[];
   /** Paste each clipped event back onto its source layer instead of the active one. */
   eventClipboardPreserveLayers: boolean;
+  /** Whether clipboard paste keeps source line/layer offsets instead of one target. */
+  clipboardRelativePlacement: boolean;
   eventLayer: number;
   focus: EditorFocus;
   multiLineEnabled: boolean;
@@ -439,6 +441,7 @@ export class EditorSession extends EventTarget {
     this.eventClipboardLines = [];
     this.eventClipboardLayers = [];
     this.eventClipboardPreserveLayers = false;
+    this.clipboardRelativePlacement = true;
     this.eventLayer = 0;
     this.focus = "notes";
     this.multiLineEnabled = false;
