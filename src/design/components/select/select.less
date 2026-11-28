@@ -1,0 +1,138 @@
+// Shared select and multi-select surfaces. The native Select and the composed
+// MultiSelect use the same control geometry and the same popup primitives.
+
+.redux-app-root .redux-multi-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.redux-app-root .redux-multi-select-trigger {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  height: var(--control-height);
+  min-height: var(--control-height);
+  min-width: 0;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border: 1px solid var(--edge-control);
+  border-radius: var(--radius-control);
+  background: var(--input-surface);
+  color: var(--foreground);
+  font: inherit;
+  font-size: var(--type-body);
+  font-weight: 400;
+  line-height: normal;
+  text-align: start;
+  cursor: var(--app-cursor-pointer);
+  transition:
+    border-color var(--design-dur-tint),
+    background-color var(--design-dur-tint);
+}
+
+.redux-app-root .redux-multi-select-trigger:hover:not(:disabled),
+.redux-app-root .redux-multi-select-trigger[aria-expanded="true"] {
+  border-color: var(--input-border-hover);
+}
+
+.redux-app-root .redux-multi-select-trigger:focus-visible {
+  border-color: var(--input-border-focus);
+  .focus-ring(1px);
+}
+
+.redux-app-root .redux-multi-select-trigger:disabled {
+  background: var(--input-surface-disabled);
+  border-color: var(--edge-divider);
+  color: var(--foreground-muted);
+  cursor: var(--app-cursor-default);
+}
+
+.redux-app-root .redux-multi-select-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-app-root .redux-multi-select-summary[data-empty="true"] {
+  color: var(--foreground-muted);
+}
+
+.redux-app-root .redux-multi-select-chevron {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  background-image:
+    linear-gradient(
+      45deg,
+      transparent 46%,
+      var(--foreground-muted) 46%,
+      var(--foreground-muted) 60%,
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      transparent 46%,
+      var(--foreground-muted) 46%,
+      var(--foreground-muted) 60%,
+      transparent 60%
+    );
+  background-position:
+    right 9px center,
+    right 5px center;
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+}
+
+.redux-multi-select-options {
+  box-sizing: border-box;
+  max-height: var(--redux-menu-max-height, calc(100vh - var(--space-4)));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 1px 0;
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px) scale(0.97);
+  transition:
+    opacity var(--design-dur-overlay) var(--design-ease-exit),
+    transform var(--design-dur-overlay) var(--design-ease-exit),
+    visibility 0s linear var(--design-dur-overlay);
+}
+
+.redux-multi-select-options[data-state="open"] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity var(--design-dur-overlay) var(--design-ease-enter),
+    transform var(--design-dur-overlay) var(--design-ease-enter),
+    visibility 0s linear;
+}
+
+.redux-multi-select-option {
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.redux-multi-select-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redux-multi-select-option > .redux-checkbox {
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redux-multi-select-options {
+    transition: none;
+  }
+}

@@ -8,6 +8,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "../../../../../design/components/button/Button.tsx";
+import { MultiSelect } from "../../../../../design/components/select/MultiSelect.tsx";
 import { InlineAlert } from "../../../../../design/components/alert/InlineAlert.tsx";
 import { FieldRow } from "../../../../../design/components/field/FieldRow.tsx";
 import { FieldRows } from "../../../../../design/components/field/FieldRows.tsx";
@@ -18,38 +19,42 @@ import { Input } from "../../../../../design/components/input/Input.tsx";
 import { EasingField } from "../../../../../design/components/easing/EasingField.tsx";
 import { t, type MessageKey } from "../../../../../i18n/index.ts";
 import { formatBeat, parseBeat, type Beat } from "../../../../../core/global/chart/timing/beat.ts";
-import { EVENT_TRACKS } from "../../../../../core/global/chart/chartVocabulary.ts";
-import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   BATCH_OPERATIONS,
   noteBatchFields,
   EVENT_BATCH_FIELDS,
 } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import { noteFields } from "../../../../../core/global/chart/noteFields.ts";
+import { NOISE_ACTIVE_EVENTS } from "../../../../../core/edit/events/eventTracks.ts";
 import {
   defaultBatchParameters,
   type BatchParameters,
   type MultiEditKind,
 } from "../../../../../core/edit/multiEdit/parameters.ts";
+import {
+  canSelectEventType,
+  defaultEventFieldForFamily,
+  eventFamilyForTypes,
+  eventTypesForSelection,
+  isEventFieldAllowed,
+} from "../../../../../core/edit/multiEdit/eventTargets.ts";
 import { useEditingFeature } from "../../../settings/editingCapabilities.ts";
 import { BeatField } from "../beat/BeatField.tsx";
 
 type Option = readonly [string | number, string];
 
-/** Stable event-track order used by the multi-edit type selector. */
-const MULTI_EDIT_EVENT_TYPES: readonly string[] = [...EVENT_TRACKS, NOISE_ACTIVE_EVENTS];
-
 export type MultiEditFormValues = BatchParameters & {
   /** Discriminates the original form batch from the event clone draft. */
   mode: "edit";
   eventApplicationMode: string;
-  eventType: string;
+  /** Event tracks selected by the current chart selection; not a persisted draft field. */
+  eventTypes: string[];
 };
 
 export interface MultiEditFormHandle {
   read(): MultiEditFormValues;
   load(value: Partial<MultiEditFormValues>, options?: { preserveCurrent?: boolean }): void;
-  setEventTypes(eventTypes: readonly string[]): void;
+  setAvailableEventTypes(eventTypes: readonly string[]): void;
   selectHistory(value: string): void;
   setResult(message: string, error: boolean): void;
   isPreviewEnabled(): boolean;
@@ -59,7 +64,7 @@ interface MultiEditFormProps {
   kind: MultiEditKind;
   multiEventEdit: boolean;
   noiseActivation: boolean;
-  eventTypes: readonly string[];
+  availableEventTypes: readonly string[];
   history: BatchParameters[];
   onReady(handle: MultiEditFormHandle): void;
   onChange(value: MultiEditFormValues): void;
@@ -171,7 +176,7 @@ export function MultiEditForm({
   kind,
   multiEventEdit,
   noiseActivation,
-  eventTypes,
+  availableEventTypes,
   history,
   onReady,
   onChange,
@@ -196,7 +201,7 @@ export function MultiEditForm({
     ...defaultBatchParameters(kind),
     ...(noiseActivation ? { field: "t1" } : {}),
     eventApplicationMode: "per-line",
-    eventType: eventTypes[0] ?? "",
+    eventTypes: eventTypesForSelection(availableEventTypes).slice(0, 1),
   }));
   const [historySelection, setHistorySelection] = useState("");
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -205,6 +210,12 @@ export function MultiEditForm({
   const currentValues = useRef(values);
   const update = (next: Partial<MultiEditFormValues>) => {
     const value = { ...values, ...next } as MultiEditFormValues;
+    if (kind === "events" && value.eventTypes.length > 0) {
+      const family = eventFamilyForTypes(value.eventTypes);
+      if (!isEventFieldAllowed(value.field, family)) {
+        value.field = defaultEventFieldForFamily(family) ?? "t1";
+      }
+    }
     setValues(value);
     currentValues.current = value;
     // A field change diverges from the loaded history entry, so its marker clears.
@@ -219,11 +230,19 @@ export function MultiEditForm({
           mode: "edit" as const,
           ...defaultBatchParameters(kind),
           eventApplicationMode: "per-line",
-          eventType: eventTypes[0] ?? "",
           ...next,
+          eventTypes: Array.isArray((next as Partial<MultiEditFormValues>).eventTypes)
+            ? eventTypesForSelection((next as Partial<MultiEditFormValues>).eventTypes ?? [])
+            : eventTypesForSelection(availableEventTypes).slice(0, 1),
         } as MultiEditFormValues;
         if (kind === "events" && !EVENT_BATCH_FIELDS.some(([key]) => key === value.field)) {
           value.field = "both";
+        }
+        if (kind === "events" && value.eventTypes.length > 0) {
+          const loadedFamily = eventFamilyForTypes(value.eventTypes);
+          if (!isEventFieldAllowed(value.field, loadedFamily)) {
+            value.field = defaultEventFieldForFamily(loadedFamily) ?? "t1";
+          }
         }
         const loadedNoteField = kind === "notes" ? noteFields.findByField(value.field) : null;
         if (loadedNoteField) {
@@ -243,13 +262,25 @@ export function MultiEditForm({
           currentValues.current = value;
         }
       },
-      setEventTypes: (nextTypes) => {
-        const uniqueTypes = [...new Set(nextTypes)];
-        const eventType = uniqueTypes[0] ?? "";
-        if (values.eventType === eventType) {
+      setAvailableEventTypes: (nextTypes) => {
+        const available = eventTypesForSelection(nextTypes);
+        const availableSet = new Set(available);
+        const retained = values.eventTypes.filter((type) => availableSet.has(type));
+        const nextEventTypes = retained.length ? retained : available.slice(0, 1);
+        const value = { ...values, eventTypes: nextEventTypes } as MultiEditFormValues;
+        if (kind === "events" && nextEventTypes.length > 0) {
+          const family = eventFamilyForTypes(nextEventTypes);
+          if (!isEventFieldAllowed(value.field, family)) {
+            value.field = defaultEventFieldForFamily(family) ?? "t1";
+          }
+        }
+        if (
+          nextEventTypes.length === values.eventTypes.length &&
+          nextEventTypes.every((type, index) => type === values.eventTypes[index]) &&
+          value.field === values.field
+        ) {
           return;
         }
-        const value = { ...values, eventType } as MultiEditFormValues;
         setValues(value);
         currentValues.current = value;
         setHistorySelection("");
@@ -262,7 +293,7 @@ export function MultiEditForm({
       },
       isPreviewEnabled: () => previewEnabled,
     }),
-    [values, previewEnabled, kind, noiseActivation, eventTypes, onChange],
+    [values, previewEnabled, kind, noiseActivation, availableEventTypes, onChange],
   );
   useLayoutEffect(() => onReady(handle), [handle, onReady]);
 
@@ -284,20 +315,24 @@ export function MultiEditForm({
         : new Set<string>(),
     [noteFieldRevision],
   );
+  const selectedEventFamily = kind === "events" ? eventFamilyForTypes(values.eventTypes) : null;
   const fields: readonly Option[] = (
     kind === "notes"
       ? noteBatchFields().filter(([key]) => noteFieldsEnabled[key] ?? contributedFields.has(key))
-      : EVENT_BATCH_FIELDS.filter(([key]) =>
-          noiseActivation ? ["t1", "t2"].includes(key) : key !== "linkgroup" || linkgroupEnabled,
-        )
+      : EVENT_BATCH_FIELDS.filter(([key]) => {
+          const familyAllowsField =
+            values.eventTypes.length === 0 || isEventFieldAllowed(key, selectedEventFamily);
+          const noiseAllowsField = noiseActivation ? ["t1", "t2"].includes(key) : true;
+          return familyAllowsField && noiseAllowsField && (key !== "linkgroup" || linkgroupEnabled);
+        })
   ).map(
     ([key, label]) =>
       [key, shortLabel(contributedFields.has(key) ? label : t(label as MessageKey))] as const,
   );
-  const eventTypeOptions: readonly Option[] = MULTI_EDIT_EVENT_TYPES.map((type) => [
-    type,
-    eventTypeLabel(type),
-  ]);
+  const eventFieldInvalid =
+    kind === "events" &&
+    !noiseActivation &&
+    (values.eventTypes.length === 0 || !isEventFieldAllowed(values.field, selectedEventFamily));
   const selectedNoteField = kind === "notes" ? noteFields.findByField(values.field) : null;
   const operations = (
     selectedNoteField?.kind === "select"
@@ -334,12 +369,27 @@ export function MultiEditForm({
     <div className="multi-edit-form">
       {noiseActivation && <p className="hint">{t("editorPanels.linePanel.noiseActiveHint")}</p>}
       <FieldRows>
-        {kind === "events" && (
-          <Field
-            title={t("editorPanels.multiEdit.eventType")}
-            value={values.eventType}
-            options={eventTypeOptions}
-            onChange={(eventType) => update({ eventType })}
+        {kind === "events" && !noiseActivation && (
+          <FieldRow
+            layout="inline"
+            density="compact"
+            label={t("editorPanels.multiEdit.eventType")}
+            control={(id) => (
+              <MultiSelect
+                id={id}
+                value={values.eventTypes}
+                options={availableEventTypes.map((type) => {
+                  const checked = values.eventTypes.includes(type);
+                  return {
+                    value: type,
+                    label: eventTypeLabel(type),
+                    disabled: !checked && !canSelectEventType(values.eventTypes, type),
+                  };
+                })}
+                placeholder={`(${t("editorPanels.multiEdit.eventType.none")})`}
+                onChange={(eventTypes) => update({ eventTypes })}
+              />
+            )}
           />
         )}
         <Field
@@ -469,7 +519,7 @@ export function MultiEditForm({
         </div>
         <div className="batch-apply redux-footer-bar">
           <div className="redux-footer-actions">
-            <Button type="button" variant="solid" onClick={onApply}>
+            <Button type="button" variant="solid" disabled={eventFieldInvalid} onClick={onApply}>
               {t("editorPanels.multiEdit.apply")}
             </Button>
           </div>

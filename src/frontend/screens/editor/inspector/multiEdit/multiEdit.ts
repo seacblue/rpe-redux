@@ -14,6 +14,7 @@ import { captureSelection } from "../../../../../core/edit/selection/snapshot.ts
 import type { SelectionSnapshot } from "../../../../../core/edit/selection/snapshot.ts";
 import { commitSelectionEdit } from "../../../../../core/edit/selection/edits.ts";
 import { previewMultiEdit } from "../../../../../core/edit/multiEdit/plan.ts";
+import { eventTypesForSelection } from "../../../../../core/edit/multiEdit/eventTargets.ts";
 import { previewEventClone } from "../../../../../core/edit/multiEdit/clone.ts";
 import { EVENT_BATCH_FIELDS } from "../../../../../core/edit/multiEdit/planVocabulary.ts";
 import type {
@@ -192,7 +193,7 @@ export class MultiEditPanel {
       mode: "edit",
       ...this.parameters.read(kind),
       eventApplicationMode: "per-line",
-      eventType: selectedEventTypes(this.getSession())[0] ?? "",
+      eventTypes: eventTypesForSelection(selectedEventTypes(this.getSession())).slice(0, 1),
     });
     this.updateHistory = () => this.renderForm(kind);
     this.read = () => this.form?.read() ?? editFallback();
@@ -249,13 +250,14 @@ export class MultiEditPanel {
       const noiseActivation =
         kind === "events" &&
         captureSelection(session).events.some((entry) => entry.type === NOISE_ACTIVE_EVENTS);
-      const eventTypes = kind === "events" ? selectedEventTypes(session) : [];
+      const availableEventTypes =
+        kind === "events" ? eventTypesForSelection(selectedEventTypes(session)) : [];
       this.noiseActivationSelected = noiseActivation;
       const view = createElement(MultiEditPane, {
         key: `${kind}:${noiseActivation}`,
         kind,
         noiseActivation,
-        eventTypes,
+        availableEventTypes,
         multiEventEdit:
           kind === "events" && session.multiLineActive && session.multiLineMode === "events",
         editHistory: this.parameters.history[kind],
@@ -313,7 +315,7 @@ export class MultiEditPanel {
                 mode: "edit",
                 ...this.parameters.read(kind),
                 eventApplicationMode: "per-line",
-                eventType: selectedEventTypes(session)[0] ?? "",
+                eventTypes: eventTypesForSelection(selectedEventTypes(session)).slice(0, 1),
               } satisfies MultiEditFormValues);
             const isClone = values.mode === "clone";
             const name = recipeName(values);
@@ -457,9 +459,10 @@ export class MultiEditPanel {
       return;
     }
     const session = this.getSession();
+    const liveSelection = captureSelection(session);
     const noiseActivation =
       this.kind === "events" &&
-      captureSelection(session).events.some((entry) => entry.type === NOISE_ACTIVE_EVENTS);
+      liveSelection.events.some((entry) => entry.type === NOISE_ACTIVE_EVENTS);
     if (noiseActivation !== this.noiseActivationSelected) {
       this.noiseActivationSelected = noiseActivation;
       this.signature = null;
@@ -471,7 +474,9 @@ export class MultiEditPanel {
       return;
     }
     if (this.kind === "events") {
-      this.form?.setEventTypes(selectedEventTypes(session));
+      this.form?.setAvailableEventTypes(
+        eventTypesForSelection(liveSelection.events.map((entry) => entry.type)),
+      );
     }
     this.chart = session.chart;
     this.signature = signature;
@@ -538,7 +543,7 @@ export class MultiEditPanel {
           mode: "edit",
           ...this.parameters.read(this.kind),
           eventApplicationMode: "per-line",
-          eventType: selectedEventTypes(session)[0] ?? "",
+          eventTypes: eventTypesForSelection(selectedEventTypes(session)).slice(0, 1),
         } satisfies MultiEditFormValues);
       if (this.kind === "events" && options.mode === "clone") {
         const preview = previewEventClone(snapshot, options, this.timeline.viewport.division);
@@ -556,7 +561,11 @@ export class MultiEditPanel {
             : "",
         );
       } else {
-        this.result = previewMultiEdit(snapshot, this.kind, options as MultiEditFormValues);
+        const previewOptions =
+          this.kind === "events" && this.noiseActivationSelected
+            ? { ...options, eventTypes: undefined }
+            : options;
+        this.result = previewMultiEdit(snapshot, this.kind, previewOptions as MultiEditFormValues);
         const changedSources = this.result.changes.filter(
           (change) =>
             !change.copy && JSON.stringify(change.before) !== JSON.stringify(change.after),
@@ -575,7 +584,11 @@ export class MultiEditPanel {
       }
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
-      isError = true;
+      if (message === t("editor.commands.multiEdit.error.noMatch")) {
+        message = "";
+      } else {
+        isError = true;
+      }
       this.form?.setReady?.(false);
       this.form?.setWarning?.("");
     }

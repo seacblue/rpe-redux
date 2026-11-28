@@ -16,7 +16,7 @@ import { noteFields } from "../../../core/global/chart/noteFields.ts";
 test("event multi-edit omits duration and order and lists start before end", () => {
   assert.deepEqual(
     EVENT_BATCH_FIELDS.map(([key]) => key),
-    ["both", "start", "end", "easing", "t1", "t2", "line", "linkgroup"],
+    ["both", "start", "end", "red", "green", "blue", "easing", "t1", "t2", "line", "linkgroup"],
   );
 });
 
@@ -154,7 +154,7 @@ test("startTime bounds accept beat notation and write beat values", () => {
   assert.equal(beatValue(result.changes[1].after.startTime), 3.5);
 });
 
-test("event type filter edits only the selected track", () => {
+test("event type filter edits every selected track", () => {
   const moveX = {
     startTime: [0, 0, 1],
     endTime: [1, 0, 1],
@@ -184,17 +184,84 @@ test("event type filter edits only the selected track", () => {
   };
 
   const result = previewMultiEdit(snapshot, "events", {
-    eventType: "moveXEvents",
+    eventTypes: ["moveXEvents", "moveYEvents"],
     field: "both",
     operation: "By",
     lower: "5",
     upper: "5",
   });
 
-  assert.equal(result.changes.length, 1);
+  assert.equal(result.changes.length, 2);
   assert.equal(result.changes[0].type, "moveXEvents");
   assert.equal(result.changes[0].after.start, 5);
   assert.equal(result.changes[0].after.end, 6);
+  assert.equal(result.changes[1].type, "moveYEvents");
+  assert.equal(result.changes[1].after.start, 15);
+  assert.equal(result.changes[1].after.end, 16);
+});
+
+test("event type filter rejects mixed value families", () => {
+  const event = {
+    startTime: [0, 0, 1],
+    endTime: [1, 0, 1],
+    start: [10, 20, 30],
+    end: [40, 50, 60],
+    easingType: 1,
+  };
+  assert.throws(
+    () =>
+      previewMultiEdit(
+        {
+          chart: {
+            judgeLineList: [{ eventLayers: [{ moveXEvents: [event], colorEvents: [event] }] }],
+          },
+          lineIndex: 0,
+          eventLayer: 0,
+          focus: "events",
+          notes: [],
+          events: [{ type: "moveXEvents", index: 0, lineIndex: 0, event }],
+        },
+        "events",
+        {
+          eventTypes: ["moveXEvents", "colorEvents"],
+          field: "both",
+          operation: "By",
+          lower: "1",
+          upper: "1",
+        },
+      ),
+    /same value type|同一种值类型/u,
+  );
+});
+
+test("RGB event channels update both colour endpoints", () => {
+  const event = {
+    startTime: [0, 0, 1],
+    endTime: [1, 0, 1],
+    start: [10, 20, 30],
+    end: [40, 50, 60],
+    easingType: 1,
+  };
+  const result = previewMultiEdit(
+    {
+      chart: { judgeLineList: [{ eventLayers: [{ colorEvents: [event] }] }] },
+      lineIndex: 0,
+      eventLayer: 0,
+      focus: "events",
+      notes: [],
+      events: [{ type: "colorEvents", index: 0, lineIndex: 0, event }],
+    },
+    "events",
+    {
+      eventTypes: ["colorEvents"],
+      field: "red",
+      operation: "To",
+      lower: "255",
+      upper: "255",
+    },
+  );
+  assert.deepEqual(result.changes[0].after.start, [255, 20, 30]);
+  assert.deepEqual(result.changes[0].after.end, [255, 50, 60]);
 });
 
 test("a batch edit keeps a hooked event's pair pinned and caches a new tail", () => {

@@ -31,7 +31,7 @@ export interface MultiEditPaneHandle {
     value: MultiEditFormValues | Partial<CloneParameters>,
     options?: { preserveCurrent?: boolean },
   ): void;
-  setEventTypes(eventTypes: readonly string[]): void;
+  setAvailableEventTypes(eventTypes: readonly string[]): void;
   selectHistory(value: string): void;
   setResult(message: string, error: boolean): void;
   setReady(ready: boolean): void;
@@ -43,7 +43,7 @@ interface MultiEditPaneProps {
   kind: MultiEditKind;
   multiEventEdit: boolean;
   noiseActivation: boolean;
-  eventTypes: readonly string[];
+  availableEventTypes: readonly string[];
   editHistory: BatchParameters[];
   cloneHistory: CloneParameters[];
   cloneValues: CloneParameters;
@@ -60,7 +60,7 @@ export function MultiEditPane({
   kind,
   multiEventEdit,
   noiseActivation,
-  eventTypes,
+  availableEventTypes,
   editHistory,
   cloneHistory,
   cloneValues,
@@ -81,9 +81,9 @@ export function MultiEditPane({
       ...defaultBatchParameters(kind),
       ...(noiseActivation ? { field: "t1" } : {}),
       eventApplicationMode: "per-line",
-      eventType: eventTypes[0] ?? "",
+      eventTypes: [...availableEventTypes].slice(0, 1),
     }),
-    [kind, noiseActivation, eventTypes],
+    [kind, noiseActivation, availableEventTypes],
   );
 
   const handle = useMemo<MultiEditPaneHandle>(
@@ -107,8 +107,8 @@ export function MultiEditPane({
         }
         editHandle.current?.load(value as Partial<MultiEditFormValues>, options);
       },
-      setEventTypes: (types) => {
-        editHandle.current?.setEventTypes(types);
+      setAvailableEventTypes: (types) => {
+        editHandle.current?.setAvailableEventTypes(types);
         cloneHandle.current?.setEventTypes(types);
       },
       selectHistory: (value) => {
@@ -161,7 +161,7 @@ export function MultiEditPane({
         <MultiEditForm
           kind={kind}
           noiseActivation={noiseActivation}
-          eventTypes={eventTypes}
+          availableEventTypes={availableEventTypes}
           multiEventEdit={multiEventEdit}
           history={editHistory}
           onReady={(next) => {
@@ -177,7 +177,7 @@ export function MultiEditPane({
           <EventCloneForm
             initialValues={cloneValues}
             defaultTargets={defaultCloneTargets}
-            eventTypes={eventTypes}
+            availableEventTypes={availableEventTypes}
             history={cloneHistory}
             onReady={(next) => {
               cloneHandle.current = next;

@@ -22,6 +22,7 @@ import type { ExpressionScope } from "../../utils/batchScript.ts";
 import { alignShaderParameters } from "../../global/chart/shader/shaderEvents.ts";
 import { eventList, eventKey, chartWithEventLists } from "../events/eventTracks.ts";
 import type { EventSession } from "../events/eventTracks.ts";
+import { eventFamilyForTypes, isEventFieldAllowed } from "./eventTargets.ts";
 import type { MultiEditKind } from "./parameters.ts";
 import type { SelectionSnapshot } from "../selection/snapshot.ts";
 import { batchOperation, beatDistribution, distribution, randomSource } from "./distribution.ts";
@@ -134,6 +135,30 @@ export function expressionScopeFor(kind: MultiEditKind): ExpressionScope {
 /** Return the exact names accepted by the planner for one expression kind. */
 export function expressionScopeFields(kind: MultiEditKind): readonly string[] {
   return Object.freeze(Object.keys(expressionScopeFor(kind)));
+}
+
+function eventColorChannelIndex(field: string): number {
+  return ["red", "green", "blue"].indexOf(field);
+}
+
+function eventColorChannelValue(item: BatchItem, field: string): number {
+  const index = eventColorChannelIndex(field);
+  const start = Array.isArray(item.start) ? item.start : undefined;
+  const value = start?.[index];
+  return typeof value === "number" && Number.isFinite(value) ? value : 255;
+}
+
+function writeEventColorChannel(item: BatchItem, field: string, value: number): void {
+  const index = eventColorChannelIndex(field);
+  if (index < 0) {
+    return;
+  }
+  for (const endpoint of ["start", "end"] as const) {
+    const source = Array.isArray(item[endpoint]) ? item[endpoint] : [255, 255, 255];
+    const color = source.length === 3 ? [...source] : [255, 255, 255];
+    color[index] = Math.max(0, Math.min(255, Math.trunc(value)));
+    item[endpoint] = color;
+  }
 }
 
 function writeField(item: BatchItem, field: string, value: number): void {
@@ -509,7 +534,26 @@ export function previewMultiEdit(
   options: BatchEditOptions = {},
 ): MultiEditResult {
   const field = options.field ?? (kind === "notes" ? "x" : "both");
-  const eventType = options.eventType;
+  const eventTypes =
+    kind === "events"
+      ? options.eventTypes !== undefined
+        ? [...new Set(options.eventTypes)]
+        : options.eventType
+          ? [options.eventType]
+          : undefined
+      : undefined;
+  const eventFamily = eventTypes ? eventFamilyForTypes(eventTypes) : null;
+  if (kind === "events" && eventTypes) {
+    if (!eventTypes.length) {
+      throw new Error(t("editor.commands.multiEdit.error.noMatch"));
+    }
+    if (!eventFamily) {
+      throw new Error(t("editor.commands.multiEdit.error.eventTypesIncompatible"));
+    }
+    if (!isEventFieldAllowed(field, eventFamily)) {
+      throw new Error(t("editor.commands.multiEdit.error.eventFieldUnsupported"));
+    }
+  }
   const operation = options.operation ?? "By";
   const random = randomSource(options.seed ?? 1);
   const modifier =
@@ -532,7 +576,7 @@ export function previewMultiEdit(
           before: entry.note,
         }))
       : snapshot.events
-          .filter((entry) => !eventType || entry.type === eventType)
+          .filter((entry) => !eventTypes || eventTypes.includes(entry.type))
           .map((entry) => ({
             type: entry.type,
             index: entry.index,
@@ -621,6 +665,9 @@ export function previewMultiEdit(
         if (field === "line") {
           change.lineIndex = Math.round(batchOperation(sourceLine, value, fieldOperation));
           change.copy = kind === "events";
+        } else if (kind === "events" && eventColorChannelIndex(field) >= 0) {
+          const before = eventColorChannelValue(after, field);
+          writeEventColorChannel(after, field, batchOperation(before, value, fieldOperation));
         } else if (field === "both") {
           if (typeof after.start !== "number" || typeof after.end !== "number") {
             throw new Error(t("editor.commands.multiEdit.error.valueOnly"));

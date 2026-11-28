@@ -40,6 +40,9 @@ export const EVENT_BATCH_FIELDS: readonly BatchVocabularyEntry[] = [
   ["both", "editor.commands.multiEdit.eventField.both"],
   ["start", "editor.commands.multiEdit.eventField.start"],
   ["end", "editor.commands.multiEdit.eventField.end"],
+  ["red", "editor.commands.multiEdit.eventField.red"],
+  ["green", "editor.commands.multiEdit.eventField.green"],
+  ["blue", "editor.commands.multiEdit.eventField.blue"],
   ["easing", "editor.commands.multiEdit.eventField.easing"],
   ["t1", "editor.commands.multiEdit.eventField.t1"],
   ["t2", "editor.commands.multiEdit.eventField.t2"],
@@ -79,7 +82,9 @@ export interface BatchItem {
 /** A batch parameter set plus the one option the panel keeps outside it. */
 export type BatchEditOptions = Partial<BatchParameters> & {
   eventApplicationMode?: string;
-  /** Restrict an event batch edit to one selected event track. */
+  /** Restrict an event batch edit to the selected event tracks. */
+  eventTypes?: readonly string[];
+  /** Legacy single-track adapter for saved recipes and older callers. */
   eventType?: string;
 };
 
