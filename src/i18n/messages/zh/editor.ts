@@ -297,6 +297,9 @@ export default {
   "editor.commands.multiEdit.eventField.both": "Both，首尾数值",
   "editor.commands.multiEdit.eventField.end": "End，结束值",
   "editor.commands.multiEdit.eventField.start": "Start，开始值",
+  "editor.commands.multiEdit.eventField.red": "Red，红色通道",
+  "editor.commands.multiEdit.eventField.green": "Green，绿色通道",
+  "editor.commands.multiEdit.eventField.blue": "Blue，蓝色通道",
   "editor.commands.multiEdit.eventField.easing": "Easing，缓动",
   "editor.commands.multiEdit.eventField.t1": "StartTime，开始拍",
   "editor.commands.multiEdit.eventField.t2": "EndTime，结束拍",
@@ -324,6 +327,8 @@ export default {
   "editor.commands.multiEdit.error.valueOnly":
     "首尾数值编辑适用于数值事件；颜色、文字、着色器可编辑时间或克隆",
   "editor.commands.multiEdit.error.unsupportedField": "当前物件不支持此数值属性",
+  "editor.commands.multiEdit.error.eventTypesIncompatible": "所选事件类型必须使用同一种值类型",
+  "editor.commands.multiEdit.error.eventFieldUnsupported": "所选事件类型不支持这个字段",
   "editor.commands.multiEdit.error.noMatch": "没有匹配的选中物件",
   "editor.commands.multiEdit.clone.error.targets": "请输入至少一个有效的目标线号",
   "editor.commands.multiEdit.clone.error.noSelection": "请先选择要克隆的事件",

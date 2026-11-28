@@ -14,6 +14,7 @@ import {
 } from "react";
 import { editableSelect, openControlSelect } from "../../controls/controlActions.ts";
 import { getPopup, subscribePopup } from "../../controls/controlActions.ts";
+import { Icon } from "../icon/Icon.tsx";
 
 /** Where the selected value sits inside the closed control. */
 export type SelectTextAlign = "left" | "center" | "right";
@@ -84,53 +85,56 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     };
   }, [openFromPointer, props.disabled, props.multiple, props.size]);
   return (
-    <select
-      ref={element}
-      className={`redux-select ${className}`}
-      {...props}
-      autoComplete="off"
-      data-text-align={textAlign}
-      data-tip-title={props["data-tip-title"] ?? title}
-      aria-haspopup="listbox"
-      aria-expanded={expanded}
-      onMouseDown={(event) => {
-        props.onMouseDown?.(event);
-        const select = event.currentTarget;
-        if (event.defaultPrevented || !editableSelect(select)) {
-          return;
-        }
-        event.preventDefault();
-        openFromPointer(select);
-      }}
-      onClick={(event) => {
-        props.onClick?.(event);
-        const select = event.currentTarget;
-        if (event.defaultPrevented || !editableSelect(select)) {
-          return;
-        }
-        event.preventDefault();
-        if (pressed.current) {
-          pressed.current = false;
-          window.clearTimeout(clearPressed.current);
-          clearPressed.current = undefined;
-          return;
-        }
-        if (getPopup()?.element !== select) {
-          select.focus({ preventScroll: true });
-          openControlSelect(select);
-        }
-      }}
-      onKeyDown={(event) => {
-        props.onKeyDown?.(event);
-        const select = event.currentTarget;
-        if (event.defaultPrevented || getPopup() || !editableSelect(select)) {
-          return;
-        }
-        if (["Enter", " "].includes(event.key)) {
+    <span className="redux-select-shell">
+      <select
+        ref={element}
+        className={`redux-select ${className}`}
+        {...props}
+        autoComplete="off"
+        data-text-align={textAlign}
+        data-tip-title={props["data-tip-title"] ?? title}
+        aria-haspopup="listbox"
+        aria-expanded={expanded}
+        onMouseDown={(event) => {
+          props.onMouseDown?.(event);
+          const select = event.currentTarget;
+          if (event.defaultPrevented || !editableSelect(select)) {
+            return;
+          }
           event.preventDefault();
-          openControlSelect(select);
-        }
-      }}
-    />
+          openFromPointer(select);
+        }}
+        onClick={(event) => {
+          props.onClick?.(event);
+          const select = event.currentTarget;
+          if (event.defaultPrevented || !editableSelect(select)) {
+            return;
+          }
+          event.preventDefault();
+          if (pressed.current) {
+            pressed.current = false;
+            window.clearTimeout(clearPressed.current);
+            clearPressed.current = undefined;
+            return;
+          }
+          if (getPopup()?.element !== select) {
+            select.focus({ preventScroll: true });
+            openControlSelect(select);
+          }
+        }}
+        onKeyDown={(event) => {
+          props.onKeyDown?.(event);
+          const select = event.currentTarget;
+          if (event.defaultPrevented || getPopup() || !editableSelect(select)) {
+            return;
+          }
+          if (["Enter", " "].includes(event.key)) {
+            event.preventDefault();
+            openControlSelect(select);
+          }
+        }}
+      />
+      <Icon name="chevronDown" size={14} className="redux-select-chevron" />
+    </span>
   );
 });

@@ -318,6 +318,9 @@ export default {
   "editor.commands.multiEdit.eventField.both": "Both, start and end value",
   "editor.commands.multiEdit.eventField.end": "End, end value",
   "editor.commands.multiEdit.eventField.start": "Start, start value",
+  "editor.commands.multiEdit.eventField.red": "Red, red channel",
+  "editor.commands.multiEdit.eventField.green": "Green, green channel",
+  "editor.commands.multiEdit.eventField.blue": "Blue, blue channel",
   "editor.commands.multiEdit.eventField.easing": "Easing, easing",
   "editor.commands.multiEdit.eventField.t1": "StartTime, start beat",
   "editor.commands.multiEdit.eventField.t2": "EndTime, end beat",
@@ -350,6 +353,10 @@ export default {
     "Start and end value editing applies to numeric events; colour, text and shader events can edit time or be cloned.",
   "editor.commands.multiEdit.error.unsupportedField":
     "The current object does not support this numeric field.",
+  "editor.commands.multiEdit.error.eventTypesIncompatible":
+    "Selected event types must share the same value type.",
+  "editor.commands.multiEdit.error.eventFieldUnsupported":
+    "This field is not available for the selected event type.",
   "editor.commands.multiEdit.error.noMatch": "No selected object matches.",
   "editor.commands.multiEdit.clone.error.targets": "Enter at least one valid target line.",
   "editor.commands.multiEdit.clone.error.noSelection": "Select at least one event to clone.",

@@ -511,6 +511,7 @@ export default {
   "editorPanels.multiEdit.applicationMode.perLine": "Apply to each line separately",
   "editorPanels.multiEdit.applicationMode.global": "Apply globally in time order",
   "editorPanels.multiEdit.eventType": "Event type",
+  "editorPanels.multiEdit.eventType.none": "No event type selected",
   "editorPanels.multiEdit.field": "Value field",
   "editorPanels.multiEdit.operation": "Operation",
   "editorPanels.multiEdit.previewToggle": "Show the result ghost",

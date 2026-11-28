@@ -51,7 +51,7 @@ export interface EventCloneFormHandle {
 interface EventCloneFormProps {
   initialValues: CloneParameters;
   defaultTargets: string;
-  eventTypes: readonly string[];
+  availableEventTypes: readonly string[];
   history: CloneParameters[];
   onReady(handle: EventCloneFormHandle): void;
   onChange(value: CloneParameters): void;
@@ -96,7 +96,7 @@ function CloneField({
 export function EventCloneForm({
   initialValues,
   defaultTargets,
-  eventTypes,
+  availableEventTypes,
   history,
   onReady,
   onChange,
@@ -104,7 +104,7 @@ export function EventCloneForm({
   onApply,
 }: EventCloneFormProps) {
   const [values, setValues] = useState<CloneParameters>(() => structuredClone(initialValues));
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => [...eventTypes]);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => [...availableEventTypes]);
   const [historySelection, setHistorySelection] = useState("");
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [resultMessage, setResultMessage] = useState("");
